@@ -1,0 +1,26 @@
+    :root { --bg: #0b0c10; --fg: #9fffb3; --dim: #3a5; --accent: #00d18f; --glow: rgba(0, 255, 136, .4); --panel: rgba(0,0,0,.6); }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body { margin:0; background: var(--bg); color: var(--fg); font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace; overflow:hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeSpeed; }
+
+    #dock { position: fixed; right: 12px; bottom: 12px; width: min(40vw, 520px); height: min(40vh, 300px); background: var(--panel); border: 1px solid #1c1; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6), inset 0 0 18px var(--glow); padding: 10px 12px 8px; display:flex; flex-direction: column; backdrop-filter: blur(3px) saturate(1.2); z-index: 9999; }
+    #dock.max { inset: 0 !important; width: 100vw !important; height: 100vh !important; left: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important; border-radius: 0; padding: 14px 16px; }
+    #title { font-weight: 600; letter-spacing:.06em; color: var(--accent); display:flex; align-items:center; gap:8px; user-select:none; cursor:move; margin-bottom:6px; }
+    #title .dot { width:8px; height:8px; border-radius:50%; background: #16ff6b; box-shadow: 0 0 12px 2px #16ff6b }
+
+    #terminal { flex:1; overflow:hidden; position: relative; }
+    #lines { position:absolute; inset:0; overflow: hidden; }
+    .line { white-space: pre; word-break: break-all; text-shadow: 0 0 8px var(--glow); line-height: 1.55; font-variant-ligatures: none; }
+    .line.bar { text-shadow: none; font-family: Consolas, "Cascadia Mono", "Courier New", monospace; font-size: 95%; line-height: 1.55; }
+
+    #footer { display:flex; flex-wrap: wrap; gap:10px; font-size: 10px; color:#9aa; opacity:.9; margin-top:6px; user-select:none; justify-content: space-between; align-items:center; }
+    .group { display:flex; gap:6px; align-items:center }
+    button { background:#111; border:1px solid #333; border-radius:6px; padding: 2px 8px; font-size: 10px; color:#bdf; cursor:pointer; }
+    button:hover { background:#222; border-color:#555; }
+    .badge { border:1px solid #3a3; border-radius: 999px; padding:2px 8px; color:#9fffb3; }
+
+    .scanlines::after { content:""; position:absolute; inset:0; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px); background-size: 100% 3px; pointer-events:none; mix-blend-mode: overlay; opacity:.12; }
+    .flicker { animation: flicker 6s infinite steps(60); }
+    @keyframes flicker { 0%,100% { opacity: 1 } 50% { opacity: .98 } 60% { opacity: .92 } 70% { opacity: .99 } }
+    .blink::after { content: "▋"; margin-left:2px; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0 } }

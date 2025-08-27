@@ -3,35 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Peripheral Crypto Log</title>
-  <style>
-    :root { --bg: #0b0c10; --fg: #9fffb3; --dim: #3a5; --accent: #00d18f; --glow: rgba(0, 255, 136, .4); --panel: rgba(0,0,0,.6); }
-    * { box-sizing: border-box }
-    html, body { height: 100% }
-    body { margin:0; background: var(--bg); color: var(--fg); font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace; overflow:hidden; -webkit-font-smoothing: antialiased; text-rendering: optimizeSpeed; }
-
-    #dock { position: fixed; right: 12px; bottom: 12px; width: min(40vw, 520px); height: min(40vh, 300px); background: var(--panel); border: 1px solid #1c1; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6), inset 0 0 18px var(--glow); padding: 10px 12px 8px; display:flex; flex-direction: column; backdrop-filter: blur(3px) saturate(1.2); z-index: 9999; }
-    #dock.max { inset: 0 !important; width: 100vw !important; height: 100vh !important; left: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important; border-radius: 0; padding: 14px 16px; }
-    #title { font-weight: 600; letter-spacing:.06em; color: var(--accent); display:flex; align-items:center; gap:8px; user-select:none; cursor:move; margin-bottom:6px; }
-    #title .dot { width:8px; height:8px; border-radius:50%; background: #16ff6b; box-shadow: 0 0 12px 2px #16ff6b }
-
-    #terminal { flex:1; overflow:hidden; position: relative; }
-    #lines { position:absolute; inset:0; overflow: hidden; }
-    .line { white-space: pre; word-break: break-all; text-shadow: 0 0 8px var(--glow); line-height: 1.55; font-variant-ligatures: none; }
-    .line.bar { text-shadow: none; font-family: Consolas, "Cascadia Mono", "Courier New", monospace; font-size: 95%; line-height: 1.55; }
-
-    #footer { display:flex; flex-wrap: wrap; gap:10px; font-size: 10px; color:#9aa; opacity:.9; margin-top:6px; user-select:none; justify-content: space-between; align-items:center; }
-    .group { display:flex; gap:6px; align-items:center }
-    button { background:#111; border:1px solid #333; border-radius:6px; padding: 2px 8px; font-size: 10px; color:#bdf; cursor:pointer; }
-    button:hover { background:#222; border-color:#555; }
-    .badge { border:1px solid #3a3; border-radius: 999px; padding:2px 8px; color:#9fffb3; }
-
-    .scanlines::after { content:""; position:absolute; inset:0; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px); background-size: 100% 3px; pointer-events:none; mix-blend-mode: overlay; opacity:.12; }
-    .flicker { animation: flicker 6s infinite steps(60); }
-    @keyframes flicker { 0%,100% { opacity: 1 } 50% { opacity: .98 } 60% { opacity: .92 } 70% { opacity: .99 } }
-    .blink::after { content: "▋"; margin-left:2px; animation: blink 1s step-end infinite; }
-    @keyframes blink { 50% { opacity: 0 } }
-  </style>
+  <title>Ambient Peripheral Noise</title>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div id="dock" class="scanlines flicker">
@@ -39,6 +12,7 @@
     <div id="terminal">
       <div id="lines"></div>
     </div>
+    
     <div id="footer">
       <div class="group">
         <button id="speedDown">-</button>
@@ -46,32 +20,30 @@
         speed
       </div>
       <div class="group">
-        <button data-theme="console">Console</button>
-        <button data-theme="mainframe">Mainframe</button>
-        <button data-theme="msdos">MS-Dos</button>
-        <button data-theme="clu">CLU</button>
-        <button data-theme="skynet">Skynet</button>
+        <span class="badge">theme: <span id="themeName">console</span></span>
+        <!--<label for="themeSelect" class="sr-only">Theme</label>
+         <select id="themeSelect"></select> -->
       </div>
       <div class="group">
         <span class="badge">mode: <span id="modeName">crypto</span></span>
-        <button data-mode="crypto">Crypto</button>
-        <button data-mode="sysadmin">Sysadmin</button>
+       <!--  <label for="modeSelect" class="sr-only">Mode</label>
+       <select id="modeSelect"></select>-->
       </div>
       <div class="group">
         <span class="badge">bar: <span id="barName">dots</span></span>
-        <button data-bar="dots">·</button>
-        <button data-bar="shade">░</button>
-        <button data-bar="dash">-</button>
-        <button data-bar="space">␠</button>
+       <!--  <label for="barSelect" class="sr-only">Progress Bar</label>
+       <select id="barSelect"></select>-->
       </div>
       <div class="group">
         <button id="pauseBtn">Pause</button>
         <button id="clearBtn">Clear</button>
         <button id="dockBtn">Dock</button>
         <button id="fullBtn">Full</button>
+        <button id="fullscreenBtn">Fullscreen</button>
       </div>
     </div>
   </div>
+</div>
 
   <script>
   (() => {
@@ -99,8 +71,8 @@
       mainframe:  { bg:'#0a0700', fg:'#ffd18a', accent:'#ffae00', glow:'rgba(255,170,0,.35)', border:'#ffae00' },
       msdos:   { bg:'#1F1F1F', fg:'#C0C0C0', accent:'#FFFFFF', glow:'rgba(192,192,192,0.25)', border:'#808080' },
       clu:   { bg:'#001318', fg:'#9de7ff', accent:'#2ad1ff', glow:'rgba(42,209,255,.35)', border:'#154a57' },
-      skynet:   { bg:'#0a0000', fg:'#ff4d4d', accent:'#ff0000', glow:'rgba(255,0,0,0.35)', border:'#660000' }
-      
+      skynet:   { bg:'#0a0000', fg:'#ff4d4d', accent:'#ff0000', glow:'rgba(255,0,0,0.35)', border:'#660000' },
+      deepthought:   { bg:'#0a0010', fg:'#e0b3ff', accent:'#aa33ff', glow:'rgba(170,51,255,0.35)', border:'#550088' }
     };
 
     const barStyles = {
@@ -123,6 +95,42 @@
     const fullBtn = document.getElementById('fullBtn');
     const modeName = document.getElementById('modeName');
     const barName = document.getElementById('barName');
+    const themeName = document.getElementById('themeName');
+    // Dropdown options
+    const THEME_OPTIONS = ['console','mainframe','msdos','clu','skynet','deepthought'];
+    const MODE_OPTIONS  = ['crypto','sysadmin'];
+    const BAR_OPTIONS   = ['dots','shade','dash','space'];
+
+    // Select elements
+    const themeSelect = document.getElementById('themeSelect');
+    const modeSelect  = document.getElementById('modeSelect');
+    const barSelect   = document.getElementById('barSelect');
+
+    function populateSelect(sel, items, current){
+      if(!sel) return;
+      sel.innerHTML = items.map(v => '<option value="' + v + '">' + v + '</option>').join('');
+      sel.value = current;
+    }
+
+    function setTheme(name){
+      cfg.theme = name;
+      applyTheme(cfg.theme);
+      if (themeName) themeName.textContent = name;
+      if (themeSelect && themeSelect.value !== name) themeSelect.value = name;
+    }
+    function setMode(mode){ cfg.persona = mode; if (modeName) modeName.textContent = mode; titleEl.textContent = cfg.persona + '-log • stream'; if (modeSelect && modeSelect.value !== mode) modeSelect.value = mode; }
+    function setBar(style){ cfg.barStyle = style; if (barName) barName.textContent = style; if (barSelect && barSelect.value !== style) barSelect.value = style; }
+
+    // Populate selects on load
+    populateSelect(themeSelect, THEME_OPTIONS, cfg.theme);
+    populateSelect(modeSelect,  MODE_OPTIONS,  cfg.persona);
+    populateSelect(barSelect,   BAR_OPTIONS,   cfg.barStyle);
+
+    // Wire change handlers
+    if (themeSelect) themeSelect.addEventListener('change', e => setTheme(e.target.value));
+    if (modeSelect)  modeSelect.addEventListener('change',  e => setMode(e.target.value));
+    if (barSelect)   barSelect.addEventListener('change',   e => setBar(e.target.value));
+
 
     function applyTheme(name){
       const t = themes[name] || themes.matrix;
@@ -255,6 +263,9 @@
 
     for(let i=0;i<8;i++) addLine(makeLine(), false);
     scheduleNext();
+    // Start in full-window
+    dockEl.classList.add('max');
+    fullBtn.textContent = 'Mini';
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
@@ -263,11 +274,12 @@
       if(k === '-'){ cfg.intensity /= 1.2 }
       if(k === 'p'){ togglePause(); }
       if(k === 'c'){ clearLines(); }
-      if(k === '1'){ cfg.theme='console'; applyTheme(cfg.theme); }
-      if(k === '2'){ cfg.theme='mainframe';  applyTheme(cfg.theme); }
-      if(k === '3'){ cfg.theme='msdos';   applyTheme(cfg.theme); }
-      if(k === '4'){ cfg.theme='clu';   applyTheme(cfg.theme); }
-      if(k === '5'){ cfg.theme='skynet';   applyTheme(cfg.theme); }
+      if(k === '1'){ setTheme('console'); }
+      if(k === '2'){ setTheme('mainframe'); }
+      if(k === '3'){ setTheme('msdos'); }
+      if(k === '4'){ setTheme('clu'); }
+      if(k === '5'){ setTheme('skynet'); }
+      if(k === '6'){ setTheme('deepthought'); }
       if(k === 'd'){ cycleDock(); }
       if(k === 'f'){ toggleMax(); }
       if(k === 'm'){ cycleMode(); }
@@ -278,26 +290,26 @@
     // Button actions
     document.getElementById('speedUp').onclick = ()=> cfg.intensity *= 1.2;
     document.getElementById('speedDown').onclick = ()=> cfg.intensity /= 1.2;
-    document.querySelectorAll('[data-theme]').forEach(btn=> btn.onclick = ()=>{ cfg.theme=btn.dataset.theme; applyTheme(cfg.theme); });
+    // removed theme buttons: now using select + setTheme()
     document.getElementById('pauseBtn').onclick = ()=> togglePause();
     document.getElementById('clearBtn').onclick = ()=> clearLines();
     document.getElementById('dockBtn').onclick = ()=> cycleDock();
-    document.querySelectorAll('[data-mode]').forEach(btn=> btn.onclick = ()=> setMode(btn.dataset.mode));
-    document.querySelectorAll('[data-bar]').forEach(btn=> btn.onclick = ()=> setBar(btn.dataset.bar));
+    // removed mode buttons: now using select + setMode()
+    // removed bar buttons: now using select + setBar()
     fullBtn.onclick = ()=> toggleMax();
 
     function togglePause(){ paused = !paused; titleEl.textContent = `${cfg.persona}-log • ${paused ? 'paused' : 'stream'}`; }
     function clearLines(){ linesEl.innerHTML=''; }
     function cycleDock(){ cfg.dock = (cfg.dock==='br')?'bl':(cfg.dock==='bl')?'tl':(cfg.dock==='tl')?'tr':'br'; applyDock(cfg.dock); }
 
-    function setMode(mode){ cfg.persona = mode; modeName.textContent = mode; titleEl.textContent = `${cfg.persona}-log • stream`; }
+    function setMode(mode){ cfg.persona = mode; modeName.textContent = mode; titleEl.textContent = `${cfg.persona}` }
     function cycleMode(){ setMode(cfg.persona === 'crypto' ? 'sysadmin' : 'crypto'); }
 
     function setBar(style){ cfg.barStyle = style; barName.textContent = style; }
     function cycleBar(){ const order=['dots','shade','dash','space']; setBar(order[(order.indexOf(cfg.barStyle)+1)%order.length]); }
 
     // Full-window toggle
-    let maximized = false;
+    let maximized = true;
     function toggleMax(){
       maximized = !maximized;
       dockEl.classList.toggle('max', maximized);
@@ -328,6 +340,22 @@
       }
       function onMouseUp(){ dragging = false; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
       header.addEventListener('mousedown', onMouseDown);
+    })();
+
+
+    // Fullscreen controls
+    (function(){
+      var fullscreenBtn = document.getElementById('fullscreenBtn');
+      if(!fullscreenBtn) return;
+      function refreshFS(){
+        fullscreenBtn.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+      }
+      document.addEventListener('fullscreenchange', refreshFS);
+      fullscreenBtn.addEventListener('click', function(){
+        if(document.fullscreenElement){ document.exitFullscreen(); }
+        else { try { document.documentElement.requestFullscreen(); } catch(e){} }
+      });
+      refreshFS();
     })();
 
     // Reduced motion
