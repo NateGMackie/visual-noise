@@ -1,0 +1,142 @@
+
+// gestures.js
+// Mobile swipe gestures mirroring your keyboard logic & clickable HUD.
+//  - Swipe LEFT  -> cycle family backward (same as '[')
+//  - Swipe RIGHT -> cycle family forward  (same as ']')
+//  - Swipe UP    -> cycle flavor forward  (same as Shift+']')
+//  - Swipe DOWN  -> cycle theme by clicking #themeName (keeps your 'tap bottom edge' for nav)
+//
+// Pull-to-refresh safe: We only block downward drags when not at the very top.
+// Landscape-friendly thresholds. No imports. Auto-inits on DOMContentLoaded.
+
+(function () {
+  let startX = 0, startY = 0, startT = 0;
+  let movedX = 0, movedY = 0;
+  let tracking = false;
+
+  function thresholds() {
+    const basis = Math.max(40, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.08));
+    return {
+      MIN_DIST: basis,
+      MAX_OFF_AXIS: Math.max(32, Math.floor(basis * 0.6)),
+      MAX_TIME: 800
+    };
+  }
+
+  function synthKey(key, opts = {}) {
+    const evt = new KeyboardEvent('keydown', {
+      key,
+      shiftKey: !!opts.shiftKey,
+      ctrlKey: !!opts.ctrlKey,
+      altKey: !!opts.altKey,
+      metaKey: !!opts.metaKey,
+      bubbles: true,
+      cancelable: true
+    });
+    window.dispatchEvent(evt);
+  }
+
+  function cycleTheme() {
+    // Prefer your existing click handler on the HUD
+    const el = document.getElementById('themeName');
+    if (el) el.click();
+    // And broadcast a custom event in case you want to hook other logic
+    window.dispatchEvent(new CustomEvent('ui:cycleTheme', { detail: { dir: 1 }}));
+  }
+
+  function onStart(e) {
+    if (e.touches && e.touches.length !== 1) return;
+    const t = e.touches ? e.touches[0] : e;
+    startX = t.clientX;
+    startY = t.clientY;
+    startT = Date.now();
+    movedX = 0;
+    movedY = 0;
+    tracking = true;
+  }
+
+  function onMove(e) {
+    if (!tracking) return;
+    const t = e.touches ? e.touches[0] : e;
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    movedX = dx;
+    movedY = dy;
+
+    const { MAX_OFF_AXIS } = thresholds();
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+
+    // Avoid pull-to-refresh: don't block downward drags starting at the very top
+    const atTop = (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0) <= 0;
+
+    // Horizontal swipe: stop scroll jitter early
+    if (absX > 12 && absY < MAX_OFF_AXIS) {
+      e.preventDefault();
+    }
+    // Vertical swipe
+    if (absY > 12 && absX < MAX_OFF_AXIS) {
+      if (dy < 0) {
+        // Upward swipe never conflicts with P2R
+        e.preventDefault();
+      } else if (!atTop) {
+        // Only prevent for downward swipes when we're not at the page top
+        e.preventDefault();
+      }
+    }
+  }
+
+  function onEnd() {
+    if (!tracking) return;
+    tracking = false;
+
+    const dt = Date.now() - startT;
+    const { MIN_DIST, MAX_OFF_AXIS, MAX_TIME } = thresholds();
+    const dx = movedX;
+    const dy = movedY;
+    const absX = Math.abs(dx), absY = Math.abs(dy);
+
+    if (dt > MAX_TIME) return;
+    if (absX < MIN_DIST && absY < MIN_DIST) return;
+
+    if (absX >= absY && absY <= MAX_OFF_AXIS) {
+      // Horizontal
+      if (dx > 0) {
+        // RIGHT: family forward (']')
+        synthKey(']');
+      } else {
+        // LEFT: family backward ('[')
+        synthKey('[');
+      }
+    } else if (absY > absX && absX <= MAX_OFF_AXIS) {
+      // Vertical
+      if (dy < 0) {
+        // UP: flavor forward (Shift+']')
+        synthKey(']', { shiftKey: true });
+      } else {
+        // DOWN: theme cycle (keeps your tap-bottom-edge for nav)
+        cycleTheme();
+      }
+    }
+  }
+
+  function onCancel() {
+    tracking = false;
+  }
+
+  function attach(el) {
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onCancel, { passive: true });
+
+    // Optional mouse support for quick desktop testing
+    el.addEventListener('mousedown', onStart, { passive: true });
+    el.addEventListener('mousemove', onMove, { passive: false });
+    el.addEventListener('mouseup', onEnd, { passive: true });
+    el.addEventListener('mouseleave', onCancel, { passive: true });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    attach(document.body);
+  });
+})();
