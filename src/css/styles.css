@@ -5,6 +5,9 @@
   --control-bg: rgba(16,16,16,0.9);
   --control-fg: #ddd;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --controls-transition: 240ms ease;
+  --controls-shadow: 0 -8px 24px rgba(0,0,0,.35);
+  --controls-safe-pad: 0px; /* can be used if you want extra breathing room */
 }
 
 /* Use dynamic viewport to avoid iOS 100vh bugs */
@@ -33,6 +36,55 @@ html, body {
   z-index: 10;
 }
 
+.clickable { cursor: pointer; }
 .controls .row { display: flex; gap: 8px; align-items: baseline; }
 label { opacity: 0.8; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 button { background: transparent; color: inherit; border: 1px solid #444; padding: 4px 8px; }
+
+/* Footer controls are fixed to bottom, hidden by default */
+#controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  transform: translateY(100%);
+  opacity: 0.001;
+  pointer-events: none;
+  transition:
+    transform var(--controls-transition),
+    opacity 180ms ease-in;
+  box-shadow: var(--controls-shadow);
+  will-change: transform, opacity;
+}
+
+/* When visible, they slide up and accept interaction */
+#controls.is-visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* When controls are visible, push content up so nothing is obscured */
+body.has-controls-visible {
+  padding-bottom: calc(var(--controls-height, 64px) + var(--controls-safe-pad));
+}
+
+/* Mobile-only, invisible bottom-edge reveal zone */
+.reveal-edge {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 28px;            /* comfortable tappable edge */
+  z-index: 25;
+  pointer-events: none;     /* disabled by default on desktop */
+  background: transparent;  /* invisible */
+}
+
+/* Enable the edge only on touch/non-hover devices */
+@media (hover: none), (pointer: coarse) {
+  .reveal-edge {
+    pointer-events: auto;
+  }
+}

@@ -77,3 +77,91 @@ on('clear', () => { active?.clear?.(ctx); });
 
 fit();
 startMode(cfg.persona);
+
+// --- Nav auto-hide / reveal ---
+(function setupNavAutohide() {
+  const controls = document.getElementById('controls');
+  const revealEdge = document.getElementById('revealEdge');
+  if (!controls) return;
+
+  // Detect "desktop-like" pointing (fine pointer + hover)
+  const isDesktopLike =
+    window.matchMedia('(hover: hover)').matches &&
+    window.matchMedia('(pointer: fine)').matches;
+
+  // Timer needs to be declared BEFORE any function that touches it
+  let hideTimer = null;
+  const HIDE_DELAY = 2500; // ms after last interaction
+
+  function updateControlsHeightVar() {
+    const h = controls.offsetHeight || 64;
+    document.documentElement.style.setProperty('--controls-height', `${h}px`);
+  }
+
+  function showControls(reason = 'manual') {
+    if (!controls.classList.contains('is-visible')) {
+      controls.classList.add('is-visible');
+      document.body.classList.add('has-controls-visible');
+      updateControlsHeightVar();
+    }
+    scheduleAutoHide();
+  }
+
+  function hideControls() {
+    controls.classList.remove('is-visible');
+    document.body.classList.remove('has-controls-visible');
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+
+  function scheduleAutoHide() {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      hideControls();
+    }, HIDE_DELAY);
+  }
+
+  // Start hidden and set initial height var
+  hideControls();
+  updateControlsHeightVar();
+  window.addEventListener('resize', updateControlsHeightVar);
+
+  // --- Desktop: click anywhere to reveal ---
+  if (isDesktopLike) {
+    document.addEventListener('pointerdown', () => {
+      if (!controls.classList.contains('is-visible')) {
+        showControls('desktop-click-anywhere');
+      }
+    });
+
+    controls.addEventListener('pointerdown', scheduleAutoHide);
+    controls.addEventListener('pointermove', scheduleAutoHide);
+    controls.addEventListener('pointerup', scheduleAutoHide);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideControls();
+    });
+
+    window.addEventListener('blur', () => scheduleAutoHide());
+  }
+
+  // --- Mobile: bottom-edge reveal zone ---
+  if (revealEdge) {
+    const reveal = () => showControls('mobile-edge');
+    revealEdge.addEventListener('touchstart', reveal, { passive: true });
+    revealEdge.addEventListener('pointerdown', reveal);
+  }
+
+  // Hide when clicking outside the bar (while visible)
+  document.addEventListener('pointerdown', (e) => {
+    if (!controls.classList.contains('is-visible')) return;
+    if (!controls.contains(e.target)) scheduleAutoHide();
+  });
+
+  // Optional global access
+  window.ControlsVisibility = {
+    show: showControls,
+    hide: hideControls,
+    scheduleHide: scheduleAutoHide
+  };
+})();

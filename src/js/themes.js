@@ -30,3 +30,7 @@ export function cycleTheme(){
 export function initThemes(){
   applyTheme(cfg.theme);
 }
+
+export const themeNames = Object.keys(THEMES);
+export function setThemeByName(name){ setTheme(name); }
+
