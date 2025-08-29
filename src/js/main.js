@@ -1,8 +1,9 @@
 // src/js/main.js
-import { cfg, on, setMode } from './state.js';
+import { cfg, on, labelsForMode } from './state.js';
 import { initThemes, applyTheme } from './themes.js';
-import { registry } from './modes/index.js';
+import { registry as modeRegistry } from './modes/index.js';
 import { initUI } from './ui/ui.js';
+
 
 const canvas = document.getElementById('canvas');
 const g = canvas.getContext('2d', { alpha: false });
@@ -16,7 +17,7 @@ const ctx = {
 };
 
 let loopId = null;
-let active = null;
+let activeModule = null;
 let lastT = performance.now();
 
 function fit(){
@@ -28,27 +29,43 @@ function fit(){
   canvas.width = ctx.w;
   canvas.height = ctx.h;
   g.setTransform(dpr,0,0,dpr,0,0);
-  active?.resize?.(ctx);
+  activeModule?.resize?.(ctx);
 }
 
 function run(t){
   ctx.now = t;
-  ctx.elapsed = t - lastT;
+  const raw = t - lastT;     // raw frame delta in ms
   lastT = t;
-  active?.frame?.(ctx);
+
+  // Apply global speed scaling (default 1.0)
+  const scale = Number.isFinite(ctx.speed) ? ctx.speed : 1;
+  // Cap to avoid giant jumps if the tab was backgrounded (tweak as you like)
+  ctx.elapsed = Math.min(raw * scale, 100);  // ms
+  ctx.dt = ctx.elapsed / 1000;               // seconds (handy for some modes)
+
+  activeModule?.frame?.(ctx);
   loopId = requestAnimationFrame(run);
 }
 
 
-function startMode(name){
+// Keep accepting a plain mode name for now (crypto/sysadmin/mining/etc.)
+function startModeByName(modeName){
   if (loopId) cancelAnimationFrame(loopId);
-  active?.stop?.(ctx);
-  active = registry[name] ?? registry.crypto;
-  const modeEl = document.getElementById('modeName');
-if (modeEl) modeEl.textContent = name;
+  activeModule?.stop?.(ctx);
 
-  active.init?.(ctx);
-  active.start?.(ctx);
+  // modes/index.js provides the actual implementations by key
+  activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
+
+// Footer: set family (mode) and type labels
+const modeEl = document.getElementById('modeName'); // shows family
+const typeEl = document.getElementById('typeName'); // shows type (make sure it exists in HTML)
+const { familyLabel, typeLabel } = labelsForMode(modeName);
+
+if (modeEl) modeEl.textContent = familyLabel;
+if (typeEl) typeEl.textContent = typeLabel;
+
+  activeModule?.init?.(ctx);
+  activeModule?.start?.(ctx);
   lastT = performance.now();
   loopId = requestAnimationFrame(run);
 }
@@ -67,16 +84,64 @@ window.addEventListener('resize', () => {
 initThemes();
 initUI();
 
+// Theme / Mode events
 on('theme', applyTheme);
-on('mode', startMode);
+on('mode', startModeByName);
+
+// --- HUD: tiny bottom-center toast used for speed feedback ---
+function showSpeedToast(multiplier) {
+  // Create once
+  let el = document.getElementById('hudSpeedToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'hudSpeedToast';
+    el.style.position = 'fixed';
+    el.style.left = '50%';
+    el.style.bottom = '72px';
+    el.style.transform = 'translateX(-50%) translateY(8px)';
+    el.style.padding = '6px 10px';
+    el.style.borderRadius = '10px';
+    el.style.background = 'rgba(0,0,0,0.7)';
+    el.style.color = '#fff';
+    el.style.font = '12px/1.2 system-ui, sans-serif';
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'transform .15s ease, opacity .15s ease';
+    document.body.appendChild(el);
+  }
+
+  // Format like “speed ×1.25”
+  const txt = Number.isFinite(multiplier) ? `speed ×${multiplier.toFixed(2)}` : 'speed';
+  el.textContent = txt;
+
+  // Animate in + auto hide
+  el.style.opacity = '1';
+  el.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(showSpeedToast._t);
+  showSpeedToast._t = setTimeout(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(8px)';
+  }, 900);
+
+  // Also briefly show the controls so it’s noticeable when they’re hidden
+  window.ControlsVisibility?.show?.();
+}
+
 
 // React to speed/pause/clear
-on('speed', (s) => { ctx.speed = s; });
+on('speed', (s) => {
+  ctx.speed = s;
+  showSpeedToast(s);
+});
 on('paused', (p) => { ctx.paused = p; });
-on('clear', () => { active?.clear?.(ctx); });
+on('clear', () => { activeModule?.clear?.(ctx); });
+
 
 fit();
-startMode(cfg.persona);
+// Boot with whatever cfg.persona is set to
+startModeByName(cfg.persona);
+
+
 
 // --- Nav auto-hide / reveal ---
 (function setupNavAutohide() {
@@ -84,21 +149,19 @@ startMode(cfg.persona);
   const revealEdge = document.getElementById('revealEdge');
   if (!controls) return;
 
-  // Detect "desktop-like" pointing (fine pointer + hover)
   const isDesktopLike =
     window.matchMedia('(hover: hover)').matches &&
     window.matchMedia('(pointer: fine)').matches;
 
-  // Timer needs to be declared BEFORE any function that touches it
   let hideTimer = null;
-  const HIDE_DELAY = 2500; // ms after last interaction
+  const HIDE_DELAY = 2500;
 
   function updateControlsHeightVar() {
     const h = controls.offsetHeight || 64;
     document.documentElement.style.setProperty('--controls-height', `${h}px`);
   }
 
-  function showControls(reason = 'manual') {
+  function showControls() {
     if (!controls.classList.contains('is-visible')) {
       controls.classList.add('is-visible');
       document.body.classList.add('has-controls-visible');
@@ -116,52 +179,34 @@ startMode(cfg.persona);
 
   function scheduleAutoHide() {
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      hideControls();
-    }, HIDE_DELAY);
+    hideTimer = setTimeout(() => { hideControls(); }, HIDE_DELAY);
   }
 
-  // Start hidden and set initial height var
   hideControls();
   updateControlsHeightVar();
   window.addEventListener('resize', updateControlsHeightVar);
 
-  // --- Desktop: click anywhere to reveal ---
   if (isDesktopLike) {
     document.addEventListener('pointerdown', () => {
-      if (!controls.classList.contains('is-visible')) {
-        showControls('desktop-click-anywhere');
-      }
+      if (!controls.classList.contains('is-visible')) showControls();
     });
-
     controls.addEventListener('pointerdown', scheduleAutoHide);
     controls.addEventListener('pointermove', scheduleAutoHide);
     controls.addEventListener('pointerup', scheduleAutoHide);
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') hideControls();
-    });
-
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideControls(); });
     window.addEventListener('blur', () => scheduleAutoHide());
   }
 
-  // --- Mobile: bottom-edge reveal zone ---
   if (revealEdge) {
-    const reveal = () => showControls('mobile-edge');
+    const reveal = () => showControls();
     revealEdge.addEventListener('touchstart', reveal, { passive: true });
     revealEdge.addEventListener('pointerdown', reveal);
   }
 
-  // Hide when clicking outside the bar (while visible)
   document.addEventListener('pointerdown', (e) => {
     if (!controls.classList.contains('is-visible')) return;
     if (!controls.contains(e.target)) scheduleAutoHide();
   });
 
-  // Optional global access
-  window.ControlsVisibility = {
-    show: showControls,
-    hide: hideControls,
-    scheduleHide: scheduleAutoHide
-  };
+  window.ControlsVisibility = { show: showControls, hide: hideControls, scheduleHide: scheduleAutoHide };
 })();

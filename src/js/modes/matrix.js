@@ -93,15 +93,13 @@ export const matrix = (() => {
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     g.textBaseline = 'top';
 
-    const baseSpeed = 1; // you can scale by ctx.speed later if desired
-
     for (let i = 0; i < cols; i++){
       const col = columns[i];
       const px = i * cellW;
 
       // Advance only when running & not paused
       if (running && !ctx.paused){
-        col.y += (col.speed * baseSpeed);
+        col.y += (col.speed * (ctx.speed || 1));
       }
 
       const headGridY = Math.floor(col.y);

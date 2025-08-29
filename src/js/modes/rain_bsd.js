@@ -49,8 +49,7 @@ export const rain_bsd = (() => {
       if (y > H && Math.random() > 0.98) {
         drops[c] = Math.floor(-rows * Math.random());
       } else {
-        // advance; you can scale by ctx.speed if you want it tied to speed hotkey
-        drops[c] += 1;
+        drops[c] += Math.max(0.25, ctx.speed);
       }
     }
   }

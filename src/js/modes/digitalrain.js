@@ -51,7 +51,7 @@ export const digitalrain = (() => {
       if (y > H && Math.random() > 0.975) {
         drops[i] = Math.floor(-20 * Math.random());
       } else {
-        drops[i] += 1; // you could scale by speed if you want: += Math.max(1, Math.round(ctx.speed))
+        drops[i] += Math.max(0.25, ctx.speed); 
       }
     }
   }

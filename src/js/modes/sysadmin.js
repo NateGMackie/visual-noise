@@ -56,6 +56,7 @@ function init(ctx){
   cols = Math.floor((ctx.w/ctx.dpr) / (fontSize*0.62));
   buffer = [];
   maxLines = rows * 5;
+  lastEmit = 0;
 }
 
 function resize(ctx){
@@ -69,17 +70,26 @@ function frame(ctx){
   const g = ctx.ctx2d;
   const W = ctx.w/ctx.dpr, H = ctx.h/ctx.dpr;
 
+  if (running && !ctx.paused){
+   lastEmit += ctx.elapsed;          // accumulate scaled ms
+   while (lastEmit >= emitEvery){
+     sample();
+     lastEmit -= emitEvery;
+   }
+ }
+
   // subtle persistence
   g.fillStyle = 'rgba(0,0,0,0.20)';
   g.fillRect(0,0,W,H);
 
-  if (running){
-    const now = performance.now();
-    if (now - lastEmit > emitEvery){
-      sample();
-      lastEmit = now;
-    }
-  }
+ if (running && !ctx.paused){
+   // accumulate elapsed that already includes global speed scaling
+   lastEmit += ctx.elapsed;
+   while (lastEmit >= emitEvery){
+     sample();
+     lastEmit -= emitEvery;
+   }
+ }
 
   const start = Math.max(0, buffer.length - rows);
   const lines = buffer.slice(start);
