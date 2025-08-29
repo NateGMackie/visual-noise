@@ -121,7 +121,7 @@ function onKey(e){
     const now = nowMs();
     let dt = now - lastT; if (dt > 250) dt = 250;
     lastT = now; acc += dt;
-    while (running && !ctx.paused && acc >= dtTarget){ stepSim(); acc -= dtTarget; }
+    while (running && !ctx.paused && acc >= (dtTarget)){ stepSim(); acc -= (dtTarget); }
 
     const cellW = Math.ceil(W / Wc), cellH = Math.ceil(H / Hc);
     const fontPx = Math.max(10, cellH);

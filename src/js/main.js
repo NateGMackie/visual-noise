@@ -33,19 +33,22 @@ function fit(){
 }
 
 function run(t){
-  ctx.now = t;
-  const raw = t - lastT;     // raw frame delta in ms
+  const raw = t - lastT;
   lastT = t;
 
-  // Apply global speed scaling (default 1.0)
-  const scale = Number.isFinite(ctx.speed) ? ctx.speed : 1;
-  // Cap to avoid giant jumps if the tab was backgrounded (tweak as you like)
-  ctx.elapsed = Math.min(raw * scale, 100);  // ms
-  ctx.dt = ctx.elapsed / 1000;               // seconds (handy for some modes)
+  ctx.now = t;
+
+  // Global speed scaling: <1 slows, >1 speeds. Clamp for safety.
+  const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
+
+  // Cap elapsed so backgrounded tabs don't fast-forward too much.
+  ctx.elapsed = Math.min(raw * s, 100); // ms
+  ctx.dt = ctx.elapsed / 1000;          // seconds (optional convenience)
 
   activeModule?.frame?.(ctx);
   loopId = requestAnimationFrame(run);
 }
+
 
 
 // Keep accepting a plain mode name for now (crypto/sysadmin/mining/etc.)

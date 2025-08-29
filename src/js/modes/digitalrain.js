@@ -4,7 +4,7 @@ export const digitalrain = (() => {
 
   // state
   let cols = 0, drops = [], fontSize = 16;
-  let running = false;
+  let running = false, tickAcc = 0, tickMs = 75;
 
   const readVar = (name, fallback) =>
     getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
@@ -26,6 +26,7 @@ export const digitalrain = (() => {
 
   function frame(ctx){
     const g = ctx.ctx2d;
+    tickAcc += ctx.elapsed;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
@@ -39,13 +40,15 @@ export const digitalrain = (() => {
     g.fillStyle = readVar('--fg', '#0f0');
 
     // only advance when running (honors pause)
-    for (let i = 0; i < cols; i++){
+    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+     if (doAdvance) tickAcc -= tickMs;
+     for (let i = 0; i < cols; i++){
       const x = i * fontSize;
       const y = drops[i] * fontSize;
       const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
       g.fillText(ch, x, y);
 
-      if (!running || ctx.paused) continue;
+      if (!doAdvance) continue;
 
       // reset with random drip length
       if (y > H && Math.random() > 0.975) {

@@ -99,7 +99,9 @@ export const matrix = (() => {
 
       // Advance only when running & not paused
       if (running && !ctx.paused){
-        col.y += (col.speed * (ctx.speed || 1));
+        const base = 0.3;
+        col.y += col.speed * base * Math.max(0.25, (ctx.speed || 1));
+        
       }
 
       const headGridY = Math.floor(col.y);

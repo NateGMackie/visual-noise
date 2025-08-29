@@ -6,7 +6,7 @@ export const crypto = (() => {
   let buffer = [];             // recent lines
   let maxLines = 200;          // ring buffer cap
   let lastEmitMs = 0;          // last emitted real timestamp (ms)
-  let emitIntervalMs = 90;     // nominal cadence between lines
+  let emitIntervalMs = 150; // slower baseline; speed scaling from main.js applies
   let cursorBlinkMs = 0;
   let running = false;         // toggled by start/stop
   let emitAccumulator = 0;     // accumulates ctx.elapsed for cadence

@@ -7,7 +7,7 @@ export const cfg = {
   persona: 'crypto',   // legacy "current mode" name (still honored)
   theme: 'classic',
   dock: 'bottom',
-  speed: 1,            // 1x default render speed
+  speed: 0.7,            // 1x default render speed
   paused: false,       // running by default
 };
 

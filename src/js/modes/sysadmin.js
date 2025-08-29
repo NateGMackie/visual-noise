@@ -4,8 +4,8 @@ export const sysadmin = (() => {
 let fontSize = 16, lineH = 18, rows = 40, cols = 80;
 let buffer = [];
 let maxLines = 200;
-let lastEmit = 0;
-let emitEvery = 110;
+let emitAcc = 0;
+let emitEvery = 200; // slower baseline for readability
 let running = false;
 let cursorBlink = 0;
 
@@ -70,12 +70,13 @@ function frame(ctx){
   const g = ctx.ctx2d;
   const W = ctx.w/ctx.dpr, H = ctx.h/ctx.dpr;
 
-  if (running && !ctx.paused){
-   lastEmit += ctx.elapsed;          // accumulate scaled ms
-   while (lastEmit >= emitEvery){
-     sample();
-     lastEmit -= emitEvery;
-   }
+ if (running && !ctx.paused){
+  emitAcc += ctx.elapsed;
+  const step = emitEvery; // already scaled globally by main.js
+  while (emitAcc >= step){
+    sample();
+    emitAcc -= step;
+  }
  }
 
   // subtle persistence

@@ -8,8 +8,8 @@ export const mining = (() => {
   let maxLines = 200;          // ring buffer cap
   let running = false;         // toggled by start/stop
   let emitAccumulator = 0;     // accumulates ctx.elapsed for cadence
-  let emitIntervalMs = 120;    // base cadence between full lines (stream mode)
-  let typeSpeedMs = 22;        // per-character typing speed when in typing mode
+  let emitIntervalMs = 150;    // base cadence between full lines (stream mode)
+  let typeSpeedMs = 26;        // per-character typing speed when in typing mode
   let typingChance = 0.22;     // probability that a new line is typed character-by-character
   let partialLine = null;      // active typing line
   let partialIdx = 0;

@@ -7,7 +7,7 @@ export const rain_bsd = (() => {
 
   // state
   let cols = 0, rows = 0, fontSize = 16, lineH = 18;
-  let drops = [];
+  let drops = [], tickAcc = 0, tickMs = 80;
   let running = false;
 
   function compute(ctx){
@@ -26,6 +26,7 @@ export const rain_bsd = (() => {
 
   function frame(ctx){
     const g = ctx.ctx2d;
+    tickAcc += ctx.elapsed;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
@@ -38,13 +39,15 @@ export const rain_bsd = (() => {
     g.textBaseline = 'top';
     g.fillStyle = readVar('--fg', '#03ffaf');
 
-    for (let c = 0; c < cols; c++){
+    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+     if (doAdvance) tickAcc -= tickMs;
+     for (let c = 0; c < cols; c++){
       const x = c * fontSize;
       const y = drops[c] * lineH;
       const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
       g.fillText(ch, x, y);
 
-      if (!running || ctx.paused) continue;
+      if (!doAdvance) continue;
 
       if (y > H && Math.random() > 0.98) {
         drops[c] = Math.floor(-rows * Math.random());
