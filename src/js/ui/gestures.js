@@ -23,18 +23,33 @@
     };
   }
 
-  function synthKey(key, opts = {}) {
-    const evt = new KeyboardEvent('keydown', {
-      key,
-      shiftKey: !!opts.shiftKey,
-      ctrlKey: !!opts.ctrlKey,
-      altKey: !!opts.altKey,
-      metaKey: !!opts.metaKey,
-      bubbles: true,
-      cancelable: true
-    });
-    window.dispatchEvent(evt);
-  }
+ function synthKey(key, opts = {}) {
+   // Map physical key -> code
+   const codeMap = {
+     '[': 'BracketLeft',
+     ']': 'BracketRight',
+     ',': 'Comma',
+     '.': 'Period',
+     ';': 'Semicolon',
+     "'": 'Quote',
+   };
+   // Map shifted character for realism (so e.key matches when Shift is held)
+   const shiftMap = { '[': '{', ']': '}', ';': ':', "'": '"', ',': '<', '.': '>' };
+   const useShift = !!opts.shiftKey;
+   const code = codeMap[key];
+   const outKey = useShift && shiftMap[key] ? shiftMap[key] : key;
+   const evt = new KeyboardEvent('keydown', {
+     key: outKey,
+     code,                 // helps your handler: code === 'BracketRight'
+     shiftKey: useShift,
+     ctrlKey: !!opts.ctrlKey,
+     altKey: !!opts.altKey,
+     metaKey: !!opts.metaKey,
+     bubbles: true,
+     cancelable: true
+   });
+   window.dispatchEvent(evt);
+ }
 
   function cycleTheme() {
     // Prefer your existing click handler on the HUD
