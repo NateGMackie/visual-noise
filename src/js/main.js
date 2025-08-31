@@ -6,14 +6,14 @@ import { initUI } from './ui/ui.js';
 import { initGestures } from './ui/gestures.js';
 import { initNotify } from './ui/notify.js';
 
-const notifier = initNotify({ bus: { on }, labelsForMode });
+initNotify({ bus: { on }, labelsForMode });
 
 const canvas = document.getElementById('canvas');
 const g = canvas.getContext('2d', { alpha: false });
 
 const ctx = {
   canvas, ctx2d: g, dpr: 1, w: 0, h: 0,
-  now: 0, elapsed: 0,
+  now: 0, elapsed: 0, dt: 0,
   speed: cfg.speed,
   paused: cfg.paused,
   bus: { on },
@@ -24,107 +24,58 @@ let activeModule = null;
 let lastT = performance.now();
 let stopGestures = null;
 
-/* ---------------------- helpers ---------------------- */
-function hardClear(ctx) {
-  const g = ctx.ctx2d, c = ctx.canvas;
+/* ---------- helpers ---------- */
+function hardClear(c) {
+  const g = c.ctx2d, cv = c.canvas;
   g.save();
-  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(1,0,0,1,0,0);
   g.globalAlpha = 1;
   g.globalCompositeOperation = 'source-over';
   g.shadowBlur = 0;
   g.shadowColor = 'rgba(0,0,0,0)';
-  g.clearRect(0, 0, c.width, c.height);
+  g.clearRect(0, 0, cv.width, cv.height);
   g.restore();
-
-  if (ctx.offscreenCtx) {
-    const oc = ctx.offscreenCtx.canvas || ctx.offscreen;
-    ctx.offscreenCtx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.offscreenCtx.clearRect(0, 0, oc.width, oc.height);
-  }
 }
 
-// On-screen [fit] logger (useful on phones)
-function renderFitDebug(data) {
-  let el = document.getElementById('fitDebug');
-  if (!el) {
-    el = document.createElement('pre');
-    el.id = 'fitDebug';
-    el.style.position = 'fixed';
-    el.style.bottom = '0';
-    el.style.left = '0';
-    el.style.maxWidth = '100%';
-    el.style.maxHeight = '50dvh';
-    el.style.overflow = 'auto';
-    el.style.background = 'rgba(0,0,0,0.7)';
-    el.style.color = '#0f0';
-    el.style.font = '12px/1.2 monospace';
-    el.style.padding = '6px';
-    el.style.margin = '0';
-    el.style.zIndex = '9999';
-    el.style.pointerEvents = 'none';
-    document.body.appendChild(el);
-  }
-  el.textContent = `[fit] ${JSON.stringify(data, null, 2)}`;
-  clearTimeout(renderFitDebug._t);
-  renderFitDebug._t = setTimeout(() => { if (el) el.remove(); }, 3500);
-}
-
-/* ---------------------- sizing ---------------------- */
-// Viewport is the source of truth; CSS controls layout.
-// We still read the rect once to catch any late safe-area shifts.
+/* ---------- sizing (brute-force fill) ---------- */
 function fit() {
+  // Viewport in CSS pixels
+  const cssW = Math.max(1, Math.round(window.innerWidth));
+  const cssH = Math.max(1, Math.round(window.innerHeight));
+
+  // Device pixel ratio (cap a bit for perf)
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
-  // CSS pixels (viewport)
-  const vw = Math.max(1, Math.round(window.innerWidth));
-  const vh = Math.max(1, Math.round(window.innerHeight));
-
-  // Force the canvas’ CSS box to match the viewport exactly.
-  // (Prevents % rounding at fractional DPI.)
-  canvas.style.width = vw + 'px';
-  canvas.style.height = vh + 'px';
-
-  // Final CSS size we actually got
-  // const rect = canvas.getBoundingClientRect();
-  // const cssW = Math.max(1, Math.round(rect.width));
-  // const cssH = Math.max(1, Math.round(rect.height));
-  const cssW = Math.max(1, Math.round(window.innerWidth));
-const cssH = Math.max(1, Math.round(window.innerHeight));
-
-
+  // Early out
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
   ctx.w = cssW;
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels; ceil avoids 1-px seams at 1.25x, etc.
-  const bw = Math.max(1, Math.ceil(cssW * dpr));
-  const bh = Math.max(1, Math.ceil(cssH * dpr));
+  // Backing store in device pixels; +2 overscan avoids seams at fractional DPI
+  const bw = Math.max(1, Math.round(cssW * dpr) + 2);
+  const bh = Math.max(1, Math.round(cssH * dpr) + 2);
   if (canvas.width  !== bw) canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Draw in CSS pixel units
+  // Draw in CSS px
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+  // Tell the mode
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
-
-  const snap = { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2), innerW: vw, innerH: vh };
-  console.log('[fit]', snap);
-  renderFitDebug(snap);
 }
 
-/* ---------------------- loop ---------------------- */
+/* ---------- loop ---------- */
 function run(t) {
   const raw = t - lastT;
   lastT = t;
 
-  ctx.now = t;
-
   const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
   ctx.elapsed = Math.min(raw * s, 100);
   ctx.dt = ctx.elapsed / 1000;
+  ctx.now = t;
 
   if (ctx.needsFullClear) {
     hardClear(ctx);
@@ -135,7 +86,7 @@ function run(t) {
   loopId = requestAnimationFrame(run);
 }
 
-/* ---------------------- modes ---------------------- */
+/* ---------- modes ---------- */
 function startModeByName(modeName) {
   if (loopId) cancelAnimationFrame(loopId);
   activeModule?.stop?.(ctx);
@@ -145,6 +96,7 @@ function startModeByName(modeName) {
 
   activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
+  // Footer labels
   const modeEl = document.getElementById('modeName');
   const typeEl = document.getElementById('typeName');
   const { familyLabel, typeLabel } = labelsForMode(modeName);
@@ -157,24 +109,18 @@ function startModeByName(modeName) {
   loopId = requestAnimationFrame(run);
 }
 
-/* ---------------------- events ---------------------- */
+/* ---------- events ---------- */
+// Throttled resize
 let resizeRaf = 0;
 window.addEventListener('resize', () => {
   if (resizeRaf) return;
-  resizeRaf = requestAnimationFrame(() => {
-    resizeRaf = 0;
-    fit();
-  });
+  resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; fit(); });
 }, { passive: true });
 
-window.addEventListener('orientationchange', () => setTimeout(fit, 120), { passive: true });
-if (window.visualViewport) {
-  const onVV = () => fit();
-  visualViewport.addEventListener('resize', onVV, { passive: true });
-  visualViewport.addEventListener('scroll', onVV, { passive: true });
-}
+// Orientation flips: give mobile a beat to settle then fit
+window.addEventListener('orientationchange', () => setTimeout(fit, 150), { passive: true });
 
-/* ---------------------- init ---------------------- */
+/* ---------- init ---------- */
 initThemes();
 initUI();
 stopGestures = initGestures(document.body);
@@ -185,22 +131,16 @@ on('mode', startModeByName);
 on('flavor', ({ flavorId }) => {
   hardClear(ctx);
   ctx.needsFullClear = true;
-  if (activeModule?.setFlavor) {
-    activeModule.setFlavor(ctx, flavorId);
-  } else {
-    activeModule?.stop?.(ctx);
-    activeModule?.init?.(ctx);
-    activeModule?.start?.(ctx);
-  }
-  const typeEl = document.getElementById('typeName');
-  if (typeEl) typeEl.textContent = flavorId;
+  if (activeModule?.setFlavor) activeModule.setFlavor(ctx, flavorId);
+  else { activeModule?.stop?.(ctx); activeModule?.init?.(ctx); activeModule?.start?.(ctx); }
+  const typeEl = document.getElementById('typeName'); if (typeEl) typeEl.textContent = flavorId;
 });
 
-on('speed', (s) => { ctx.speed = s; window.ControlsVisibility?.show?.(); });
+on('speed', (s) => { ctx.speed = s; });
 on('paused', (p) => { ctx.paused = p; });
 on('clear',  () => { activeModule?.clear?.(ctx); });
 
-// 🔑 Single, ordered boot: measure → then start (no second start elsewhere)
+// Single, ordered boot
 requestAnimationFrame(() => {
   fit();
   startModeByName(cfg.persona);

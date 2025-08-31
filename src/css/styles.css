@@ -10,29 +10,25 @@
   --controls-safe-pad: 0px; /* can be used if you want extra breathing room */
 }
 
-/* Use dynamic viewport to avoid iOS 100vh bugs */
+/* Prevent scrollbars; give us a clean viewport */
+html, body { margin: 0; height: 100%; overflow: hidden; }
+
+/* Stage holds the canvas; keep it pinned */
 #stage {
   position: fixed;
   inset: 0;
-  height: 100dvh;
   overflow: hidden;
 }
 
-/* Make the canvas match the viewport exactly; no % rounding */
+/* Canvas fills the viewport; overscan by 2px to kill seams */
 #canvas {
   position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 100vw;
-  min-height: 100vh;
+  width: calc(100dvw + 2px);
+  height: calc(100dvh + 2px);
   display: block;
   touch-action: none;
 }
-
-
-/* Avoid scrollbars from the 1px rounding safety */
-html, body { overflow: hidden; }
 
 .controls {
   position: fixed; left: 0; right: 0; bottom: 0;
