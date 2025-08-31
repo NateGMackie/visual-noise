@@ -24,7 +24,7 @@ let activeModule = null;
 let lastT = performance.now();
 let stopGestures = null;
 
-// --- full canvas state reset between modes ---
+/* ---------------------- helpers ---------------------- */
 function hardClear(ctx) {
   const g = ctx.ctx2d, c = ctx.canvas;
   g.save();
@@ -43,6 +43,33 @@ function hardClear(ctx) {
   }
 }
 
+// On-screen [fit] logger (useful on phones)
+function renderFitDebug(data) {
+  let el = document.getElementById('fitDebug');
+  if (!el) {
+    el = document.createElement('pre');
+    el.id = 'fitDebug';
+    el.style.position = 'fixed';
+    el.style.bottom = '0';
+    el.style.left = '0';
+    el.style.maxWidth = '100%';
+    el.style.maxHeight = '50dvh';
+    el.style.overflow = 'auto';
+    el.style.background = 'rgba(0,0,0,0.7)';
+    el.style.color = '#0f0';
+    el.style.font = '12px/1.2 monospace';
+    el.style.padding = '6px';
+    el.style.margin = '0';
+    el.style.zIndex = '9999';
+    el.style.pointerEvents = 'none';
+    document.body.appendChild(el);
+  }
+  el.textContent = `[fit] ${JSON.stringify(data, null, 2)}`;
+  clearTimeout(renderFitDebug._t);
+  renderFitDebug._t = setTimeout(() => { if (el) el.remove(); }, 4000);
+}
+
+/* ---------------------- sizing ---------------------- */
 // Only size the BACKING STORE. CSS controls the visual size.
 function fit() {
   // Measure CSS pixel size the canvas actually occupies
@@ -61,7 +88,7 @@ function fit() {
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels; ceil avoids 1px seams at 1.25x etc.
+  // Backing store in device pixels; ceil avoids 1px seams at fractional scale
   const bw = Math.max(1, Math.ceil(cssW * dpr));
   const bh = Math.max(1, Math.ceil(cssH * dpr));
   if (canvas.width  !== bw) canvas.width  = bw;
@@ -74,10 +101,13 @@ function fit() {
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
 
-  // Optional: keep one concise debug line to verify sizes
-  // console.log('[fit]', { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2) });
+  // Debug
+  const snap = { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2), innerW: window.innerWidth, innerH: window.innerHeight };
+  console.log('[fit]', snap);
+  renderFitDebug(snap);
 }
 
+/* ---------------------- loop ---------------------- */
 function run(t) {
   const raw = t - lastT;
   lastT = t;
@@ -97,6 +127,7 @@ function run(t) {
   loopId = requestAnimationFrame(run);
 }
 
+/* ---------------------- modes ---------------------- */
 function startModeByName(modeName) {
   if (loopId) cancelAnimationFrame(loopId);
   activeModule?.stop?.(ctx);
@@ -118,6 +149,7 @@ function startModeByName(modeName) {
   loopId = requestAnimationFrame(run);
 }
 
+/* ---------------------- events ---------------------- */
 // Resize (throttled)
 let resizeRaf = 0;
 window.addEventListener('resize', () => {
@@ -136,7 +168,7 @@ if (window.visualViewport) {
   visualViewport.addEventListener('scroll', onVV, { passive: true });
 }
 
-// Init
+/* ---------------------- init ---------------------- */
 initThemes();
 initUI();
 stopGestures = initGestures(document.body);
@@ -164,81 +196,8 @@ on('speed', (s) => { ctx.speed = s; window.ControlsVisibility?.show?.(); });
 on('paused', (p) => { ctx.paused = p; });
 on('clear',  () => { activeModule?.clear?.(ctx); });
 
-fit();
-startModeByName(cfg.persona);
-
-// --- Nav auto-hide / reveal ---
-(function setupNavAutohide() {
-  const controls = document.getElementById('controls');
-  const revealEdge = document.getElementById('revealEdge');
-  if (!controls) return;
-
-  const isDesktopLike =
-    window.matchMedia('(hover: hover)').matches &&
-    window.matchMedia('(pointer: fine)').matches;
-
-  let hideTimer = null;
-  const HIDE_DELAY = 2500;
-
-  function updateControlsHeightVar() {
-    const h = controls.offsetHeight || 64;
-    document.documentElement.style.setProperty('--controls-height', `${h}px`);
-  }
-
-  function showControls() {
-    if (!controls.classList.contains('is-visible')) {
-      controls.classList.add('is-visible');
-      document.body.classList.add('has-controls-visible');
-      updateControlsHeightVar();
-    }
-    scheduleAutoHide();
-  }
-
-  function hideControls() {
-    controls.classList.remove('is-visible');
-    document.body.classList.remove('has-controls-visible');
-    clearTimeout(hideTimer);
-    hideTimer = null;
-  }
-
-  function scheduleAutoHide() {
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => { hideControls(); }, HIDE_DELAY);
-  }
-
-  hideControls();
-  updateControlsHeightVar();
-  window.addEventListener('resize', updateControlsHeightVar);
-
-  if (isDesktopLike) {
-    document.addEventListener('pointerdown', () => {
-      if (!controls.classList.contains('is-visible')) showControls();
-    });
-    controls.addEventListener('pointerdown', scheduleAutoHide);
-    controls.addEventListener('pointermove', scheduleAutoHide);
-    controls.addEventListener('pointerup', scheduleAutoHide);
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideControls(); });
-    window.addEventListener('blur', () => scheduleAutoHide());
-  }
-
-  if (revealEdge) {
-    const reveal = () => showControls();
-    revealEdge.addEventListener('touchstart', reveal, { passive: true });
-    revealEdge.addEventListener('pointerdown', reveal);
-  }
-
-  document.addEventListener('pointerdown', (e) => {
-    if (!controls.classList.contains('is-visible')) return;
-    if (!controls.contains(e.target)) scheduleAutoHide();
-  });
-
-  window.ControlsVisibility = { show: showControls, hide: hideControls, scheduleHide: scheduleAutoHide };
-})();
-
-// Service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/visual-noise/service-worker.js')
-      .catch(err => console.error('SW registration failed:', err));
-  });
-}
+// 🔑 Single, ordered boot: measure → then start
+requestAnimationFrame(() => {
+  fit();
+  startModeByName(cfg.persona);
+});

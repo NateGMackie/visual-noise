@@ -30,13 +30,18 @@ body {
   overflow: hidden;
 }
 
-#canvas{
+#canvas {
   position: fixed;
   inset: 0;
-  width: 100svw;
-  height: 100svh;
+  width: 100dvw;   /* was 100svw */
+  height: 100dvh;  /* was 100svh */
   display: block;
   touch-action: none;
+}
+
+#stage, #canvas {
+  min-width: 100vw;
+  min-height: 100vh;
 }
 
 .controls {
