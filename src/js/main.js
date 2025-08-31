@@ -3,8 +3,9 @@ import { cfg, on, labelsForMode } from './state.js';
 import { initThemes, applyTheme } from './themes.js';
 import { registry as modeRegistry } from './modes/index.js';
 import { initUI } from './ui/ui.js';
-import { initNotify } from './ui/notify.js';  // NEW
 import { initGestures } from './ui/gestures.js';
+import { initNotify } from './ui/notify.js';
+const notifier = initNotify({ bus: { on }, labelsForMode });
 
 const canvas = document.getElementById('canvas');
 const g = canvas.getContext('2d', { alpha: false });
@@ -21,7 +22,6 @@ let loopId = null;
 let activeModule = null;
 let lastT = performance.now();
 let stopGestures = null;
-let lastSize = { w: 0, h: 0, dpr: 0 };
 
 // --- full canvas state reset between modes ---
 function hardClear(ctx) {
@@ -38,7 +38,6 @@ function hardClear(ctx) {
   g.clearRect(0, 0, c.width, c.height);
   g.restore();
 
-  // If you ever add an offscreen buffer, clear it here too:
   if (ctx.offscreenCtx) {
     const oc = ctx.offscreenCtx.canvas || ctx.offscreen;
     ctx.offscreenCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -46,39 +45,37 @@ function hardClear(ctx) {
   }
 }
 
+// Only size the BACKING STORE. Let CSS control the visual size.
 function fit() {
-  // Viewport in CSS pixels
-  const w = Math.round(window.innerWidth);
-  const h = Math.round(window.innerHeight);
+  // Measure the actual layout box the canvas is occupying
+  const rect = canvas.getBoundingClientRect();
 
-  // DPR can swing on rotate; cap a bit for perf
+  // CSS pixel size that your draw/layout code should use
+  const cssW = Math.max(1, Math.round(rect.width));
+  const cssH = Math.max(1, Math.round(rect.height));
+
+  // DPR can swing on rotate; cap slightly for perf
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
-  // Early out if nothing changed
-  if (w === lastSize.w && h === lastSize.h && dpr === lastSize.dpr) return;
+  // If nothing changed, bail early
+  if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
+  ctx.w = cssW;
+  ctx.h = cssH;
   ctx.dpr = dpr;
-  ctx.w = w;   // expose CSS-px size to modes
-  ctx.h = h;
-
-  // Keep CSS size in lockstep with the viewport (prevents stretch/blur)
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
 
   // Backing store in device pixels
-  const bw = Math.max(1, Math.floor(w * dpr));
-  const bh = Math.max(1, Math.floor(h * dpr));
+  const bw = Math.max(1, Math.floor(cssW * dpr));
+  const bh = Math.max(1, Math.floor(cssH * dpr));
   if (canvas.width !== bw) canvas.width = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
   // Reset transform then apply DPR so draw code can stay in CSS pixels
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Let the mode recompute its layout, and clear any stretched remnants
-  ctx.needsFullClear = true;   // cleared at the top of next frame
+  // Full clear next frame, and let the mode recompute its layout
+  ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
-
-  lastSize = { w, h, dpr };
 }
 
 function run(t) {
@@ -156,7 +153,6 @@ if (window.visualViewport) {
 // Init
 initThemes();
 initUI();
-const notifier = initNotify({ bus: { on }, labelsForMode }); // NEW
 stopGestures = initGestures(document.body);
 
 window.addEventListener('beforeunload', () => {
@@ -207,11 +203,9 @@ function showSpeedToast(multiplier) {
     document.body.appendChild(el);
   }
 
-  // Format like “speed ×1.25”
   const txt = Number.isFinite(multiplier) ? `speed ×${multiplier.toFixed(2)}` : 'speed';
   el.textContent = txt;
 
-  // Animate in + auto hide
   el.style.opacity = '1';
   el.style.transform = 'translateX(-50%) translateY(0)';
   clearTimeout(showSpeedToast._t);
@@ -220,15 +214,13 @@ function showSpeedToast(multiplier) {
     el.style.transform = 'translateX(-50%) translateY(8px)';
   }, 900);
 
-  // Also briefly show the controls so it’s noticeable when they’re hidden
   window.ControlsVisibility?.show?.();
 }
 
 // React to speed/pause/clear
 on('speed', (s) => {
   ctx.speed = s;
-  // keep your UX touch: briefly reveal controls
-  window.ControlsVisibility?.show?.();
+  showSpeedToast(s);
 });
 on('paused', (p) => { ctx.paused = p; });
 on('clear', () => { activeModule?.clear?.(ctx); });

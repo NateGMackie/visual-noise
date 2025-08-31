@@ -59,7 +59,7 @@ export function initNotify({ bus, labelsForMode }) {
   const lbls = (typeof labelsForMode === 'function') ? labelsForMode(v) : null;
   const fam  = lbls?.familyLabel ?? v;
   const type = lbls?.typeLabel ?? '';
-  const value = type ? `mode: ${fam} | type: ${type}` : `mode: ${fam}`;
+  const value = type ? `${fam} | type: ${type}` : `${fam}`;
   notify({ kind: 'mode', title: 'Mode', value });
   } // <-- close notifyMode BEFORE declaring notifyType
 
@@ -67,7 +67,7 @@ export function initNotify({ bus, labelsForMode }) {
   const lbls = (typeof labelsForMode === 'function') ? labelsForMode(modeKey) : null;
   const fam  = lbls?.familyLabel ?? modeKey;
   const flav = tryLabel(labelsForMode, modeKey, typeKey) ?? typeKey;
-  notify({ kind: 'type', title: 'Type', value: `mode: ${fam} | type: ${flav}` });
+  notify({ kind: 'type', title: 'Type', value: `${fam} | type: ${flav}` });
   }
   function notifyTheme(v) {
     notify({ kind: 'theme', title: 'Theme', value: String(v) });
@@ -85,7 +85,7 @@ export function initNotify({ bus, labelsForMode }) {
     const fam     = lbls?.familyLabel ?? modeKey;
     // Try to resolve a pretty label for the flavor; fall back to the key
     const flavLabel = tryLabel?.(labelsForMode, modeKey, flavKey) ?? flavKey;
-    notify({ kind: 'type', title: 'Type', value: `mode: ${fam} | type: ${flavLabel}` });
+    notify({ kind: 'type', title: 'Type', value: `${fam} | type: ${flavLabel}` });
   },
     notify: (payload) => {
       // Accept { kind, title, value, ttl } from any module
