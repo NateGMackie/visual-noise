@@ -30,11 +30,11 @@ body {
   overflow: hidden;
 }
 
-#canvas {
-  position: fixed;       /* new */
-  inset: 0;              /* new */
-  width: 100svw;         /* new: viewport units avoid % rounding */
-  height: 100svh;        /* new */
+#canvas{
+  position: fixed;
+  inset: 0;
+  width: 100svw;
+  height: 100svh;
   display: block;
   touch-action: none;
 }

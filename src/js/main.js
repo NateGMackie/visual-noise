@@ -45,40 +45,37 @@ function hardClear(ctx) {
 
 // Only size the BACKING STORE. CSS controls the visual size.
 function fit() {
-  // Prefer visualViewport (avoids toolbar/zoom rounding), fallback to rect
-  const vvW = Math.round(window.visualViewport?.width  ?? 0);
-  const vvH = Math.round(window.visualViewport?.height ?? 0);
+  // Measure CSS pixel size the canvas actually occupies
   const rect = canvas.getBoundingClientRect();
-  const cssW = vvW || Math.round(rect.width);
-  const cssH = vvH || Math.round(rect.height);
+  const cssW = Math.max(1, Math.round(rect.width));
+  const cssH = Math.max(1, Math.round(rect.height));
 
+  // DPR can swing on rotate/zoom; cap slightly for perf
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
   // Early-out if nothing changed
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
+  // Store CSS pixels for layout/draw math
   ctx.w = cssW;
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels (ceil avoids 1px under-allocation at 1.25x)
+  // Backing store in device pixels; ceil avoids 1px seams at 1.25x etc.
   const bw = Math.max(1, Math.ceil(cssW * dpr));
   const bh = Math.max(1, Math.ceil(cssH * dpr));
-  if (canvas.width !== bw)  canvas.width  = bw;
+  if (canvas.width  !== bw) canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Reset transform then apply DPR so draw code stays in CSS pixels
+  // Reset transform then apply DPR so draw code uses CSS pixels
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Clean slate next frame, and let the mode recompute its layout
+  // Clean slate on next frame and let the mode recompute its layout
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
 
-  // Debug snapshot (console only)
-  console.log('[fit]', {
-    cssW, cssH, bw, bh, dpr: +dpr.toFixed(2),
-    innerW: window.innerWidth, innerH: window.innerHeight
-  });
+  // Optional: keep one concise debug line to verify sizes
+  // console.log('[fit]', { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2) });
 }
 
 function run(t) {
