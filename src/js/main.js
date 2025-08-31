@@ -37,38 +37,40 @@ function hardClear(c) {
   g.restore();
 }
 
-/* ---------- sizing (stable, no overscan) ---------- */
 function fit() {
-  // Use the canvas’ actual laid-out box (CSS pixels).
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
+  // Viewport in CSS pixels
+  const w = Math.round(window.innerWidth);
+  const h = Math.round(window.innerHeight);
 
-  // Device pixel ratio (clamped a bit for perf).
+  // DPR can swing on rotate; cap a bit for perf
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
-  if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
+  // Early out if nothing changed
+  if (w === ctx.w && h === ctx.h && dpr === ctx.dpr) return;
 
-  ctx.w = cssW;
-  ctx.h = cssH;
+  // Expose to modes
   ctx.dpr = dpr;
+  ctx.w = w;
+  ctx.h = h;
 
-  // Backing store in device pixels (ceil avoids 1-px seams at 125% DPI).
-  const bw = Math.max(1, Math.ceil(cssW * dpr));
-  const bh = Math.max(1, Math.ceil(cssH * dpr));
+  // Keep CSS size in lockstep with the viewport (prevents stretch/blur)
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+
+  // Backing store in device pixels (old behavior = floor)
+  const bw = Math.max(1, Math.floor(w * dpr));
+  const bh = Math.max(1, Math.floor(h * dpr));
   if (canvas.width  !== bw) canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Draw in CSS pixel units
+  // Reset transform then apply DPR so draw code can stay in CSS pixels
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Clean slate on next frame; let the mode recompute layout
-  ctx.needsFullClear = true;
+  // Let the mode recompute its layout, and clear any stretched remnants
+  ctx.needsFullClear = true;   // cleared at the top of next frame
   activeModule?.resize?.(ctx);
-
-  // Optional: uncomment for quick diagnostics on devices
-  // console.log('[fit]', { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2) });
 }
+
 
 /* ---------- loop ---------- */
 function run(t) {
