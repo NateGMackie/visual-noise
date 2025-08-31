@@ -37,34 +37,37 @@ function hardClear(c) {
   g.restore();
 }
 
-/* ---------- sizing (brute-force fill) ---------- */
+/* ---------- sizing (stable, no overscan) ---------- */
 function fit() {
-  // Viewport in CSS pixels
-  const cssW = Math.max(1, Math.round(window.innerWidth));
-  const cssH = Math.max(1, Math.round(window.innerHeight));
+  // Use the canvas’ actual laid-out box (CSS pixels).
+  const rect = canvas.getBoundingClientRect();
+  const cssW = Math.max(1, Math.round(rect.width));
+  const cssH = Math.max(1, Math.round(rect.height));
 
-  // Device pixel ratio (cap a bit for perf)
+  // Device pixel ratio (clamped a bit for perf).
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
-  // Early out
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
   ctx.w = cssW;
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels; +2 overscan avoids seams at fractional DPI
-  const bw = Math.max(1, Math.round(cssW * dpr) + 2);
-  const bh = Math.max(1, Math.round(cssH * dpr) + 2);
+  // Backing store in device pixels (ceil avoids 1-px seams at 125% DPI).
+  const bw = Math.max(1, Math.ceil(cssW * dpr));
+  const bh = Math.max(1, Math.ceil(cssH * dpr));
   if (canvas.width  !== bw) canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Draw in CSS px
+  // Draw in CSS pixel units
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Tell the mode
+  // Clean slate on next frame; let the mode recompute layout
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
+
+  // Optional: uncomment for quick diagnostics on devices
+  // console.log('[fit]', { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2) });
 }
 
 /* ---------- loop ---------- */
@@ -117,7 +120,7 @@ window.addEventListener('resize', () => {
   resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; fit(); });
 }, { passive: true });
 
-// Orientation flips: give mobile a beat to settle then fit
+// Orientation: let it settle, then measure
 window.addEventListener('orientationchange', () => setTimeout(fit, 150), { passive: true });
 
 /* ---------- init ---------- */
@@ -140,7 +143,7 @@ on('speed', (s) => { ctx.speed = s; });
 on('paused', (p) => { ctx.paused = p; });
 on('clear',  () => { activeModule?.clear?.(ctx); });
 
-// Single, ordered boot
+// Boot once: measure → then start
 requestAnimationFrame(() => {
   fit();
   startModeByName(cfg.persona);

@@ -10,25 +10,36 @@
   --controls-safe-pad: 0px; /* can be used if you want extra breathing room */
 }
 
-/* Prevent scrollbars; give us a clean viewport */
-html, body { margin: 0; height: 100%; overflow: hidden; }
+/* Zero out page chrome and prevent scrollbars */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
 
-/* Stage holds the canvas; keep it pinned */
+/* Stage pins to the viewport */
 #stage {
   position: fixed;
   inset: 0;
   overflow: hidden;
 }
 
-/* Canvas fills the viewport; overscan by 2px to kill seams */
+/* Canvas fills the stage (and therefore the viewport) */
 #canvas {
   position: fixed;
   inset: 0;
-  width: calc(100dvw + 2px);
-  height: calc(100dvh + 2px);
+  /* Primary: 100% of the pinned stage */
+  width: 100%;
+  height: 100%;
+  /* Safety so mobile/Windows fractional DPI can't under-fill */
+  min-width: 100dvw;
+  min-height: 100dvh;
+
   display: block;
   touch-action: none;
 }
+
 
 .controls {
   position: fixed; left: 0; right: 0; bottom: 0;
