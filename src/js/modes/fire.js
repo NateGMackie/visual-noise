@@ -3,6 +3,8 @@
 //   Shift+↑ / Shift+↓  -> HEIGHT_BOOST (taller/shorter flames)
 //   Shift+[ / Shift+]  -> FUEL_ROWS_FRAC (fuel band thickness)
 
+import { emit } from '../state.js';
+
 export const fire = (() => {
   // Base tunables
   const SCALE_X = 7;
@@ -62,25 +64,34 @@ function onKey(e){
   switch(e.key){
     case 'ArrowUp':
       HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
-      showHUD();
+      emit('notify', { kind: 'type', title: 'Fire', value: `height: ${HEIGHT_BOOST.toFixed(2)}`, ttl: 1200 });
       break;
     case 'ArrowDown':
       HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
-      showHUD();
+      emit('notify', { kind: 'type', title: 'Fire', value: `height: ${HEIGHT_BOOST.toFixed(2)}`, ttl: 1200 });
       break;
     case 'ArrowRight':
       FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
-      showHUD();
+      emit('notify', { kind: 'type', title: 'Fire', value: `fuel: ${(FUEL_ROWS_FRAC*100).toFixed(0)}%`, ttl: 1200 });
       break;
     case 'ArrowLeft':
       FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
-      showHUD();
+      emit('notify', { kind: 'type', title: 'Fire', value: `fuel: ${(FUEL_ROWS_FRAC*100).toFixed(0)}%`, ttl: 1200 });
       break;
   }
 }
 
   // API
-  function init(ctx){ resize(ctx); lastT = nowMs(); }
+  function init(ctx){ 
+    // At the very top of each mode's init(ctx)
+const g = ctx.ctx2d;
+g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
+g.globalAlpha = 1;
+g.globalCompositeOperation = 'source-over';
+g.shadowBlur = 0;
+g.shadowColor = 'rgba(0,0,0,0)';
+
+    resize(ctx); lastT = nowMs(); }
   function start(){ running = true; lastT = nowMs(); window.addEventListener('keydown', onKey, { passive:true }); }
   function stop(){ running = false; window.removeEventListener('keydown', onKey); }
   function clear(ctx){ if (heat) heat.fill(0); ctx.ctx2d.clearRect(0,0,ctx.w,ctx.h); }
@@ -160,6 +171,8 @@ function onKey(e){
       g.fillText(text, 8+pad, 10);
     }
   }
+
+
 
   return { init, resize, start, stop, frame, clear };
 })();

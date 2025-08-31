@@ -1,4 +1,4 @@
-// src/js/modes/fire.js
+// src/js/modes/simplefire.js
 export const fire = (() => {
   // Coarse heat diffusion + ASCII shade ramp
   const SHADES = [' ', '.', ':', '-', '~', '*', '+', '=', '%', '#', '@'];
@@ -9,7 +9,16 @@ export const fire = (() => {
   let heat = null;         // Uint8Array or JS array of length Wc*Hc
   let running = false;
 
-  function init(ctx){ resize(ctx); }
+  function init(ctx){ 
+    // At the very top of each mode's init(ctx)
+const g = ctx.ctx2d;
+g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
+g.globalAlpha = 1;
+g.globalCompositeOperation = 'source-over';
+g.shadowBlur = 0;
+g.shadowColor = 'rgba(0,0,0,0)';
+
+    resize(ctx); }
   function start(){ running = true; }
   function stop(){ running = false; }
   function clear(ctx){ if (heat) heat.fill(0); ctx.ctx2d.clearRect(0,0,ctx.w,ctx.h); }

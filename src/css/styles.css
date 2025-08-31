@@ -30,7 +30,7 @@ body {
   overflow: hidden;
 }
 
-#canvas { display: block; width: 100%; height: 100%; }
+#canvas { display: block; width: 100%; height: 100%; touch-action: none;}
 
 .controls {
   position: fixed; left: 0; right: 0; bottom: 0;
@@ -118,3 +118,48 @@ body.has-controls-visible {
 .hud-help-wrap { margin-top: 8px; opacity: .9; }
 .hud-help { display: grid; gap: 2px; font-size: 11px; }
 .hud-help .alt { opacity: .7; margin-left: 6px; }
+
+/* Toast/HUD */
+.hud-toasts {
+  position: fixed;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 160px;
+  max-width: 80vw;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(18, 18, 22, 0.9);
+  color: #fff;
+  font: 500 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+  will-change: opacity, transform;
+}
+
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.hide { opacity: 0; transform: translateY(-6px); }
+
+.toast-row { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast-title { opacity: 0.8; }
+.toast-value { font-weight: 700; }
+
+/* Subtle accents by kind */
+.toast.speed { background: rgba(40, 40, 70, 0.92); }
+.toast.mode  { background: rgba(20, 60, 40, 0.92); }
+.toast.type  { background: rgba(60, 20, 40, 0.92); }
+.toast.theme { background: rgba(40, 40, 40, 0.92); }
+
+@media (prefers-reduced-motion: reduce) {
+  .toast, .toast.show, .toast.hide { transition: none; transform: none; }
+}

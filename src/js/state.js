@@ -1,5 +1,7 @@
 // src/js/state.js
 
+import { registry as modeRegistry } from './modes/index.js';
+
 // -------------------------
 // Legacy-compatible config
 // -------------------------
@@ -19,6 +21,7 @@ export function on(evt, fn){
 }
 export function off(evt, fn){ listeners.get(evt)?.delete(fn); }
 export function emit(evt, data){ listeners.get(evt)?.forEach(fn => fn(data)); }
+
 
 // -------------------------
 // NEW: Single Source of Truth
@@ -98,16 +101,23 @@ export const registry = {
 
     fire: {
       name: 'fire',
-      modesOrder: ['fire'],
+      modesOrder: ['fire', 'fireAscii'],
       modes: {
         fire: {
           name: 'fire',
-          flavorsOrder: ['glow', 'simple'],
+          flavorsOrder: ['classic'],
           flavors: {
-            glow:   { name: 'glow',   defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
-            simple: { name: 'simple', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
+            classic:   { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'fire',
+        },
+        fireAscii: {
+          name: 'fireAscii',
+          flavorsOrder: ['classic'],
+          flavors: {
+            classic:   { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
+          },
+          impl: 'fireAscii',
         },
       },
     },
@@ -156,6 +166,7 @@ export function setFlavor(nextFlavorId) {
   const { mode } = getNode(); if (!mode?.flavors[nextFlavorId]) return;
   active.flavorId = nextFlavorId;
   initDefaults();
+  emit('flavor', { modeId: active.modeId, flavorId: active.flavorId });
 }
 
 export function stepMode(delta) {
@@ -253,12 +264,23 @@ export const taxonomy = {
   digitalrain: { family: 'rain',      typeLabel: 'digital rain' },
   // fire
   fire:        { family: 'fire',      typeLabel: 'fire' },
+  fireAscii:   { family: 'fire',      typeLabel: 'fireAscii' },
 };
 
-export function labelsForMode(modeName){
-  const t = taxonomy[modeName] || { family: 'unknown', typeLabel: modeName || '' };
+export function labelsForMode(id){
+  const mod = modeRegistry?.[id];
+  if (mod && mod.info) {
+    const familyLabel = mod.info.family || id;
+    const typeLabel = mod.info.flavor || mod.info.type || mod.info.variant || id;
+    return { familyLabel, typeLabel };
+  }
+  // fallback to static table for older modes
+  const t = taxonomy[id] || { family: 'unknown', typeLabel: id || '' };
   return { familyLabel: t.family, typeLabel: t.typeLabel };
 }
+
+
+
 
 
 // Speed / Pause / Clear (unchanged public surface)

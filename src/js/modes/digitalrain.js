@@ -15,7 +15,16 @@ export const digitalrain = (() => {
     drops = new Array(cols).fill(0).map(() => Math.floor(Math.random() * -40));
   }
 
-  function init(ctx){ calc(ctx); }
+  function init(ctx){ 
+    // At the very top of each mode's init(ctx)
+const g = ctx.ctx2d;
+g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
+g.globalAlpha = 1;
+g.globalCompositeOperation = 'source-over';
+g.shadowBlur = 0;
+g.shadowColor = 'rgba(0,0,0,0)';
+
+    calc(ctx); }
   function resize(ctx){ calc(ctx); }
   function start(){ running = true; }
   function stop(){ running = false; }

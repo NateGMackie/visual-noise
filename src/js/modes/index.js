@@ -8,6 +8,7 @@ import { matrix } from './matrix.js';
 import { digitalrain } from './digitalrain.js';
 import { rain_bsd } from './rain_bsd.js';
 import { fire } from './fire.js';
+import { fireAscii } from './fire_ascii.js';
 
 
 // Map keys directly to the mode objects
@@ -19,4 +20,8 @@ export const registry = {
   digitalrain,
   rain_bsd,
   fire,
+  fire_ascii: fireAscii,
 };
+
+export const variantsByFamily = (family) =>
+  Object.entries(registry).filter(([, mod]) => mod?.info?.family === family);

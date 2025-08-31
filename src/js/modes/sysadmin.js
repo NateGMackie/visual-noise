@@ -50,6 +50,14 @@ function sample(){
 }
 
 function init(ctx){
+  // At the very top of each mode's init(ctx)
+const g = ctx.ctx2d;
+g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
+g.globalAlpha = 1;
+g.globalCompositeOperation = 'source-over';
+g.shadowBlur = 0;
+g.shadowColor = 'rgba(0,0,0,0)';
+
   fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
   lineH = Math.floor(fontSize * 1.15);
   rows = Math.floor((ctx.h/ctx.dpr) / lineH);
