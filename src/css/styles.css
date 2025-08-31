@@ -30,7 +30,14 @@ body {
   overflow: hidden;
 }
 
-#canvas { display: block; width: 100%; height: 100%; touch-action: none;}
+#canvas {
+  position: fixed;       /* new */
+  inset: 0;              /* new */
+  width: 100svw;         /* new: viewport units avoid % rounding */
+  height: 100svh;        /* new */
+  display: block;
+  touch-action: none;
+}
 
 .controls {
   position: fixed; left: 0; right: 0; bottom: 0;

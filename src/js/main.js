@@ -5,6 +5,7 @@ import { registry as modeRegistry } from './modes/index.js';
 import { initUI } from './ui/ui.js';
 import { initGestures } from './ui/gestures.js';
 import { initNotify } from './ui/notify.js';
+
 const notifier = initNotify({ bus: { on }, labelsForMode });
 
 const canvas = document.getElementById('canvas');
@@ -25,10 +26,7 @@ let stopGestures = null;
 
 // --- full canvas state reset between modes ---
 function hardClear(ctx) {
-  const g = ctx.ctx2d;
-  const c = ctx.canvas;
-
-  // Do not disturb devicePixelRatio scaling: save → set 1:1 → clear → restore
+  const g = ctx.ctx2d, c = ctx.canvas;
   g.save();
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalAlpha = 1;
@@ -45,37 +43,42 @@ function hardClear(ctx) {
   }
 }
 
-// Only size the BACKING STORE. Let CSS control the visual size.
+// Only size the BACKING STORE. CSS controls the visual size.
 function fit() {
-  // Measure the actual layout box the canvas is occupying
+  // Prefer visualViewport (avoids toolbar/zoom rounding), fallback to rect
+  const vvW = Math.round(window.visualViewport?.width  ?? 0);
+  const vvH = Math.round(window.visualViewport?.height ?? 0);
   const rect = canvas.getBoundingClientRect();
+  const cssW = vvW || Math.round(rect.width);
+  const cssH = vvH || Math.round(rect.height);
 
-  // CSS pixel size that your draw/layout code should use
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
-
-  // DPR can swing on rotate; cap slightly for perf
   const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
 
-  // If nothing changed, bail early
+  // Early-out if nothing changed
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
   ctx.w = cssW;
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels
-  const bw = Math.max(1, Math.floor(cssW * dpr));
-  const bh = Math.max(1, Math.floor(cssH * dpr));
-  if (canvas.width !== bw) canvas.width = bw;
+  // Backing store in device pixels (ceil avoids 1px under-allocation at 1.25x)
+  const bw = Math.max(1, Math.ceil(cssW * dpr));
+  const bh = Math.max(1, Math.ceil(cssH * dpr));
+  if (canvas.width !== bw)  canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Reset transform then apply DPR so draw code can stay in CSS pixels
+  // Reset transform then apply DPR so draw code stays in CSS pixels
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Full clear next frame, and let the mode recompute its layout
+  // Clean slate next frame, and let the mode recompute its layout
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
+
+  // Debug snapshot (console only)
+  console.log('[fit]', {
+    cssW, cssH, bw, bh, dpr: +dpr.toFixed(2),
+    innerW: window.innerWidth, innerH: window.innerHeight
+  });
 }
 
 function run(t) {
@@ -84,14 +87,10 @@ function run(t) {
 
   ctx.now = t;
 
-  // Global speed scaling: <1 slows, >1 speeds. Clamp for safety.
   const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
+  ctx.elapsed = Math.min(raw * s, 100);
+  ctx.dt = ctx.elapsed / 1000;
 
-  // Cap elapsed so backgrounded tabs don't fast-forward too much.
-  ctx.elapsed = Math.min(raw * s, 100); // ms
-  ctx.dt = ctx.elapsed / 1000;          // seconds (optional convenience)
-
-  // If a mode change requested a full clear, do it at the start of the next frame.
   if (ctx.needsFullClear) {
     hardClear(ctx);
     ctx.needsFullClear = false;
@@ -101,24 +100,18 @@ function run(t) {
   loopId = requestAnimationFrame(run);
 }
 
-// Keep accepting a plain mode name for now (crypto/sysadmin/mining/etc.)
 function startModeByName(modeName) {
   if (loopId) cancelAnimationFrame(loopId);
   activeModule?.stop?.(ctx);
 
-  // Hard reset the bitmap so no trails/ghosts carry over
   hardClear(ctx);
-  // Also set a one-frame belt-and-suspenders clear (handles timing races)
   ctx.needsFullClear = true;
 
-  // modes/index.js provides the actual implementations by key
   activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
-  // Footer: set family (mode) and type labels
-  const modeEl = document.getElementById('modeName'); // shows family
-  const typeEl = document.getElementById('typeName'); // shows type (make sure it exists in HTML)
+  const modeEl = document.getElementById('modeName');
+  const typeEl = document.getElementById('typeName');
   const { familyLabel, typeLabel } = labelsForMode(modeName);
-
   if (modeEl) modeEl.textContent = familyLabel;
   if (typeEl) typeEl.textContent = typeLabel;
 
@@ -138,12 +131,8 @@ window.addEventListener('resize', () => {
   });
 }, { passive: true });
 
-// Handle orientation flips (DPR & viewport settle a beat later)
-window.addEventListener('orientationchange', () => {
-  setTimeout(fit, 120);
-}, { passive: true });
-
-// Track visualViewport changes (iOS Safari, Chrome toolbars)
+// Orientation & viewport UI changes
+window.addEventListener('orientationchange', () => setTimeout(fit, 120), { passive: true });
 if (window.visualViewport) {
   const onVV = () => fit();
   visualViewport.addEventListener('resize', onVV, { passive: true });
@@ -154,79 +143,31 @@ if (window.visualViewport) {
 initThemes();
 initUI();
 stopGestures = initGestures(document.body);
-
-window.addEventListener('beforeunload', () => {
-  if (typeof stopGestures === 'function') stopGestures();
-});
+window.addEventListener('beforeunload', () => { if (typeof stopGestures === 'function') stopGestures(); });
 
 // Theme / Mode events
 on('theme', applyTheme);
 on('mode', startModeByName);
-on('flavor', ({ modeId, flavorId }) => {
-  // If the current module knows how to switch flavors, do it on a clean slate
+on('flavor', ({ flavorId }) => {
   hardClear(ctx);
   ctx.needsFullClear = true;
-
   if (activeModule?.setFlavor) {
     activeModule.setFlavor(ctx, flavorId);
   } else {
-    // Fallback: re-init the same mode to pick up the new flavor
     activeModule?.stop?.(ctx);
     activeModule?.init?.(ctx);
     activeModule?.start?.(ctx);
   }
-
-  // Refresh the footer label if you're showing the type there
   const typeEl = document.getElementById('typeName');
   if (typeEl) typeEl.textContent = flavorId;
 });
 
-// --- HUD: tiny bottom-center toast used for speed feedback ---
-function showSpeedToast(multiplier) {
-  // Create once
-  let el = document.getElementById('hudSpeedToast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'hudSpeedToast';
-    el.style.position = 'fixed';
-    el.style.left = '50%';
-    el.style.bottom = '72px';
-    el.style.transform = 'translateX(-50%) translateY(8px)';
-    el.style.padding = '6px 10px';
-    el.style.borderRadius = '10px';
-    el.style.background = 'rgba(0,0,0,0.7)';
-    el.style.color = '#fff';
-    el.style.font = '12px/1.2 system-ui, sans-serif';
-    el.style.opacity = '0';
-    el.style.pointerEvents = 'none';
-    el.style.transition = 'transform .15s ease, opacity .15s ease';
-    document.body.appendChild(el);
-  }
-
-  const txt = Number.isFinite(multiplier) ? `speed ×${multiplier.toFixed(2)}` : 'speed';
-  el.textContent = txt;
-
-  el.style.opacity = '1';
-  el.style.transform = 'translateX(-50%) translateY(0)';
-  clearTimeout(showSpeedToast._t);
-  showSpeedToast._t = setTimeout(() => {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(-50%) translateY(8px)';
-  }, 900);
-
-  window.ControlsVisibility?.show?.();
-}
-
-// React to speed/pause/clear
-on('speed', (s) => {
-  ctx.speed = s;
-  showSpeedToast(s);
-});
+// Speed/Pause/Clear
+on('speed', (s) => { ctx.speed = s; window.ControlsVisibility?.show?.(); });
 on('paused', (p) => { ctx.paused = p; });
-on('clear', () => { activeModule?.clear?.(ctx); });
+on('clear',  () => { activeModule?.clear?.(ctx); });
 
 fit();
-// Boot with whatever cfg.persona is set to
 startModeByName(cfg.persona);
 
 // --- Nav auto-hide / reveal ---
@@ -297,7 +238,7 @@ startModeByName(cfg.persona);
   window.ControlsVisibility = { show: showControls, hide: hideControls, scheduleHide: scheduleAutoHide };
 })();
 
-// Register the service worker for offline + installability
+// Service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/visual-noise/service-worker.js')
