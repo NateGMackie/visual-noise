@@ -85,9 +85,12 @@ function fit() {
   canvas.style.height = vh + 'px';
 
   // Final CSS size we actually got
-  const rect = canvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-  const cssH = Math.max(1, Math.round(rect.height));
+  // const rect = canvas.getBoundingClientRect();
+  // const cssW = Math.max(1, Math.round(rect.width));
+  // const cssH = Math.max(1, Math.round(rect.height));
+  const cssW = Math.max(1, Math.round(window.innerWidth));
+const cssH = Math.max(1, Math.round(window.innerHeight));
+
 
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
