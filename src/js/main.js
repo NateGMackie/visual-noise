@@ -66,43 +66,48 @@ function renderFitDebug(data) {
   }
   el.textContent = `[fit] ${JSON.stringify(data, null, 2)}`;
   clearTimeout(renderFitDebug._t);
-  renderFitDebug._t = setTimeout(() => { if (el) el.remove(); }, 4000);
+  renderFitDebug._t = setTimeout(() => { if (el) el.remove(); }, 3500);
 }
 
 /* ---------------------- sizing ---------------------- */
-// Only size the BACKING STORE. CSS controls the visual size.
+// Viewport is the source of truth; CSS controls layout.
+// We still read the rect once to catch any late safe-area shifts.
 function fit() {
-  // Measure CSS pixel size the canvas actually occupies
+  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
+
+  // CSS pixels (viewport)
+  const vw = Math.max(1, Math.round(window.innerWidth));
+  const vh = Math.max(1, Math.round(window.innerHeight));
+
+  // Force the canvas’ CSS box to match the viewport exactly.
+  // (Prevents % rounding at fractional DPI.)
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+
+  // Final CSS size we actually got
   const rect = canvas.getBoundingClientRect();
   const cssW = Math.max(1, Math.round(rect.width));
   const cssH = Math.max(1, Math.round(rect.height));
 
-  // DPR can swing on rotate/zoom; cap slightly for perf
-  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
-
-  // Early-out if nothing changed
   if (cssW === ctx.w && cssH === ctx.h && dpr === ctx.dpr) return;
 
-  // Store CSS pixels for layout/draw math
   ctx.w = cssW;
   ctx.h = cssH;
   ctx.dpr = dpr;
 
-  // Backing store in device pixels; ceil avoids 1px seams at fractional scale
+  // Backing store in device pixels; ceil avoids 1-px seams at 1.25x, etc.
   const bw = Math.max(1, Math.ceil(cssW * dpr));
   const bh = Math.max(1, Math.ceil(cssH * dpr));
   if (canvas.width  !== bw) canvas.width  = bw;
   if (canvas.height !== bh) canvas.height = bh;
 
-  // Reset transform then apply DPR so draw code uses CSS pixels
+  // Draw in CSS pixel units
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Clean slate on next frame and let the mode recompute its layout
   ctx.needsFullClear = true;
   activeModule?.resize?.(ctx);
 
-  // Debug
-  const snap = { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2), innerW: window.innerWidth, innerH: window.innerHeight };
+  const snap = { cssW, cssH, bw, bh, dpr: +dpr.toFixed(2), innerW: vw, innerH: vh };
   console.log('[fit]', snap);
   renderFitDebug(snap);
 }
@@ -150,7 +155,6 @@ function startModeByName(modeName) {
 }
 
 /* ---------------------- events ---------------------- */
-// Resize (throttled)
 let resizeRaf = 0;
 window.addEventListener('resize', () => {
   if (resizeRaf) return;
@@ -160,7 +164,6 @@ window.addEventListener('resize', () => {
   });
 }, { passive: true });
 
-// Orientation & viewport UI changes
 window.addEventListener('orientationchange', () => setTimeout(fit, 120), { passive: true });
 if (window.visualViewport) {
   const onVV = () => fit();
@@ -174,7 +177,6 @@ initUI();
 stopGestures = initGestures(document.body);
 window.addEventListener('beforeunload', () => { if (typeof stopGestures === 'function') stopGestures(); });
 
-// Theme / Mode events
 on('theme', applyTheme);
 on('mode', startModeByName);
 on('flavor', ({ flavorId }) => {
@@ -191,12 +193,11 @@ on('flavor', ({ flavorId }) => {
   if (typeEl) typeEl.textContent = flavorId;
 });
 
-// Speed/Pause/Clear
 on('speed', (s) => { ctx.speed = s; window.ControlsVisibility?.show?.(); });
 on('paused', (p) => { ctx.paused = p; });
 on('clear',  () => { activeModule?.clear?.(ctx); });
 
-// 🔑 Single, ordered boot: measure → then start
+// 🔑 Single, ordered boot: measure → then start (no second start elsewhere)
 requestAnimationFrame(() => {
   fit();
   startModeByName(cfg.persona);
