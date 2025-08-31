@@ -3,6 +3,7 @@ import { cfg, on, labelsForMode } from './state.js';
 import { initThemes, applyTheme } from './themes.js';
 import { registry as modeRegistry } from './modes/index.js';
 import { initUI } from './ui/ui.js';
+import { initGestures } from './ui/gestures.js';
 
 
 const canvas = document.getElementById('canvas');
@@ -19,6 +20,7 @@ const ctx = {
 let loopId = null;
 let activeModule = null;
 let lastT = performance.now();
+let stopGestures = null;
 
 function fit(){
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -86,6 +88,11 @@ window.addEventListener('resize', () => {
 // Init
 initThemes();
 initUI();
+stopGestures = initGestures(document.body);
+
+window.addEventListener('beforeunload', () => {
+  if (typeof stopGestures === 'function') stopGestures();
+});
 
 // Theme / Mode events
 on('theme', applyTheme);
@@ -213,3 +220,11 @@ startModeByName(cfg.persona);
 
   window.ControlsVisibility = { show: showControls, hide: hideControls, scheduleHide: scheduleAutoHide };
 })();
+
+// Register the service worker for offline + installability
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/visual-noise/service-worker.js')
+      .catch(err => console.error('SW registration failed:', err));
+  });
+}

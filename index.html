@@ -8,6 +8,20 @@
   />
   <title>Ambient Visual Noise</title>
   <link rel="stylesheet" href="src/css/styles.css" />
+
+  <!-- PWA manifest -->
+<link rel="manifest" href="/visual-noise/manifest.webmanifest">
+
+<!-- Theme / address bar color -->
+<meta name="theme-color" content="#0aff9d">
+
+<!-- iOS "full-screen" / status bar -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AVNoise">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+
 </head>
 <body>
   <main id="stage" aria-live="off">
@@ -23,6 +37,5 @@
   <!-- Mobile bottom-edge reveal hit area (invisible) -->
   <div id="revealEdge" class="reveal-edge" aria-hidden="true"></div>
   <script type="module" src="src/js/main.js"></script>
-  <script src="src/js/ui/gestures.js"></script>
 </body>
 </html>

@@ -9,7 +9,13 @@
 // Pull-to-refresh safe: We only block downward drags when not at the very top.
 // Landscape-friendly thresholds. No imports. Auto-inits on DOMContentLoaded.
 
-(function () {
+// Exported initializer so main.js can control setup/teardown
+export function initGestures(root = document.body) {
+  // keep using the same attach() you already defined below
+  attach(root);
+  // return a cleanup to remove listeners if needed
+  return () => detach(root);
+}
   let startX = 0, startY = 0, startT = 0;
   let movedX = 0, movedY = 0;
   let tracking = false;
@@ -151,7 +157,14 @@
     el.addEventListener('mouseleave', onCancel, { passive: true });
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    attach(document.body);
-  });
-})();
+ function detach(el) {
+   el.removeEventListener('touchstart', onStart);
+   el.removeEventListener('touchmove', onMove);
+   el.removeEventListener('touchend', onEnd);
+   el.removeEventListener('touchcancel', onCancel);
+
+   el.removeEventListener('mousedown', onStart);
+   el.removeEventListener('mousemove', onMove);
+   el.removeEventListener('mouseup', onEnd);
+   el.removeEventListener('mouseleave', onCancel);
+ }
