@@ -10,6 +10,14 @@
   --controls-safe-pad: 0px; /* can be used if you want extra breathing room */
 }
 
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
 body {
   padding-top: env(safe-area-inset-top);
   padding-right: env(safe-area-inset-right);
@@ -18,14 +26,20 @@ body {
 }
 
 #stage {
-  position: fixed; inset: 0;
+  position: fixed; 
+  inset: 0;
+  display: block;
   height: 100%; 
+  width: 100%;
   min-height: 100dvh; /* for mobile */
+  min-width: 100dvw; /* for mobile */
   overflow: hidden;
-  background-color: red;
+  background: #000;
 }
 
 #canvas { 
+  position: fixed;
+  inset: 0;
   background: #000;
   display: block; 
   width: 100%; 
