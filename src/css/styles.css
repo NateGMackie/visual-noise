@@ -19,11 +19,12 @@ body {
 
 #stage {
   position: fixed; inset: 0;
-  height: 100dvh; /* <- key for mobile browser chrome */
+  height: 100%; /* <- key for mobile browser chrome */
+  min-height: 100dvh;
   overflow: hidden;
 }
 
-#canvas { display: block; width: 100%; height: 100%; touch-action: none;}
+#canvas { display: block; width: 100%; height: 100dvh; touch-action: none;}
 
 
 .controls {
