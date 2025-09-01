@@ -37,7 +37,32 @@ function hardClear(c) {
   g.restore();
 }
 
-function fit(){
+function fit() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
+
+  // device-pixel surface size
+  const devW = Math.max(1, Math.floor(rect.width  * dpr));
+  const devH = Math.max(1, Math.floor(rect.height * dpr));
+
+  // expose device px to modes (matches your existing expectations)
+  ctx.dpr = dpr;
+  ctx.w = devW;
+  ctx.h = devH;
+
+  // resize backing store only when needed
+  if (canvas.width !== devW)  canvas.width  = devW;
+  if (canvas.height !== devH) canvas.height = devH;
+
+  // draw in device px (identity transform)
+  g.setTransform(1, 0, 0, 1, 0, 0);
+
+  activeModule?.resize?.(ctx);
+}
+
+
+
+/*function fit(){
   const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   ctx.dpr = dpr;
   const rect = canvas.getBoundingClientRect();
@@ -47,7 +72,7 @@ function fit(){
   canvas.height = ctx.h;
   g.setTransform(dpr,0,0,dpr,0,0);
   activeModule?.resize?.(ctx);
-}
+}*/
 
 
 /* ---------- loop ---------- */
