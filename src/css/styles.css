@@ -24,7 +24,16 @@ body {
   overflow: hidden;
 }
 
-#canvas { display: block; width: 100%; min-width: 100dvw; height: 100%; min-height: 100dvh; touch-action: none;}
+#canvas { 
+  background: #000;
+  display: block; 
+  width: 100%; 
+  min-width: 100dvw; 
+  height: 100%; 
+  min-height: 100dvh; 
+  touch-action: none;
+  z-index: 0;
+}
 
 
 .controls {
