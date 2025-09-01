@@ -37,37 +37,15 @@ function hardClear(c) {
   g.restore();
 }
 
-function fit() {
-  // Viewport in CSS pixels
-  const w = Math.round(window.innerWidth);
-  const h = Math.round(window.innerHeight);
-
-  // DPR can swing on rotate; cap a bit for perf
-  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
-
-  // Early out if nothing changed
-  if (w === ctx.w && h === ctx.h && dpr === ctx.dpr) return;
-
-  // Expose to modes
+function fit(){
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   ctx.dpr = dpr;
-  ctx.w = w;
-  ctx.h = h;
-
-  // Keep CSS size in lockstep with the viewport (prevents stretch/blur)
-  canvas.style.width  = w + 'px';
-  canvas.style.height = h + 'px';
-
-  // Backing store in device pixels (old behavior = floor)
-  const bw = Math.max(1, Math.floor(w * dpr));
-  const bh = Math.max(1, Math.floor(h * dpr));
-  if (canvas.width  !== bw) canvas.width  = bw;
-  if (canvas.height !== bh) canvas.height = bh;
-
-  // Reset transform then apply DPR so draw code can stay in CSS pixels
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Let the mode recompute its layout, and clear any stretched remnants
-  ctx.needsFullClear = true;   // cleared at the top of next frame
+  const rect = canvas.getBoundingClientRect();
+  ctx.w = Math.floor(rect.width * dpr);
+  ctx.h = Math.floor(rect.height * dpr);
+  canvas.width = ctx.w;
+  canvas.height = ctx.h;
+  g.setTransform(dpr,0,0,dpr,0,0);
   activeModule?.resize?.(ctx);
 }
 
