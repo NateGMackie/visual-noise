@@ -3,6 +3,101 @@ import { cfg, setMode, incSpeed, decSpeed, togglePause, clearAll, labelsForMode 
 import { cycleTheme, themeNames, setThemeByName } from '../themes.js';
 import { registry } from '../modes/index.js';
 
+// --- ControlsVisibility shim ---
+// Aligns with styles.css (#controls.is-visible + body.has-controls-visible)
+// Adds auto-hide after inactivity.
+(function ensureControlsVisibility() {
+  if (!window.ControlsVisibility) {
+    const body = document.body;
+    const el = document.getElementById('controls'); // footer
+    const BODY_ON = 'has-controls-visible';
+    const EL_ON = 'is-visible';
+
+    // --- configurable timeout (seconds)
+    const autoHideMs = 3000; // 3s; tweak to taste
+
+    let hideTimer = null;
+    let pausedByHover = false;
+
+    function updateBodyPad() {
+      if (!el) return;
+      const h = el.offsetHeight || 64;
+      body.style.setProperty('--controls-height', `${h}px`);
+    }
+
+    function clearTimer() {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    }
+
+    function scheduleHide() {
+      clearTimer();
+      if (pausedByHover) return; // don't count down while hovering the controls
+      hideTimer = setTimeout(hide, autoHideMs);
+    }
+
+    function show() {
+      if (el) {
+        el.classList.add(EL_ON);
+        el.removeAttribute('aria-hidden');
+      }
+      body.classList.add(BODY_ON);
+      updateBodyPad();
+      scheduleHide();
+    }
+
+    function hide() {
+      clearTimer();
+      if (el) {
+        el.classList.remove(EL_ON);
+        el.setAttribute('aria-hidden', 'true');
+      }
+      body.classList.remove(BODY_ON);
+    }
+
+    function toggle() {
+      const isOpen = el?.classList.contains(EL_ON);
+      return isOpen ? hide() : show();
+    }
+
+    // --- reset timer on activity anywhere
+    const resetOnActivity = (e) => {
+      // If controls aren’t open, no need to reset
+      if (!el?.classList.contains(EL_ON)) return;
+      // Ignore key repeats and interactions inside inputs
+      if (e && e.type === 'keydown') {
+        if (e.repeat) return;
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      }
+      scheduleHide();
+    };
+
+    // Pause/resume auto-hide when the user is over the controls
+    if (el) {
+      el.addEventListener('pointerenter', () => { pausedByHover = true; clearTimer(); });
+      el.addEventListener('pointerleave', () => { pausedByHover = false; scheduleHide(); });
+      // Interactions inside the controls should also keep them around briefly
+      el.addEventListener('click', resetOnActivity, { capture: true });
+      el.addEventListener('input', resetOnActivity, { capture: true });
+    }
+
+    // Global activity hooks
+    window.addEventListener('pointerdown', resetOnActivity, { capture: true });
+    window.addEventListener('pointermove', resetOnActivity, { passive: true });
+    window.addEventListener('keydown', resetOnActivity, { capture: true });
+
+    window.ControlsVisibility = { show, hide, toggle };
+
+    // Fallback custom events (already emitted by other code)
+    window.addEventListener('ui:controls:show', show,   { capture: true });
+    window.addEventListener('ui:controls:toggle', toggle, { capture: true });
+  }
+})();
+
+
 // Helper: make any element act like a button without default button styles
 function makeClickable(el, onActivate){
   if (!el) return;
@@ -256,6 +351,21 @@ export function initUI(){
     }
   });
 
+// Global "click anywhere" to open controls/nav
+document.addEventListener('click', (ev) => {
+  // Ignore clicks inside the menu itself if you tag it:
+  if (ev.target?.closest?.('[data-ignore-global-open],#menu,.vn-menu,#controls,.controls')) return;
+  window.ControlsVisibility?.show?.() ||
+  window.dispatchEvent(new CustomEvent('ui:controls:show'));
+}, { capture: true });
+
+const edge = document.getElementById('revealEdge');
+if (edge) {
+  edge.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    window.ControlsVisibility?.show?.();
+  }, { passive: false });
+}
 
   // Final pass to correct any startup text set by other modules
   setModeLabel();

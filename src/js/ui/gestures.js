@@ -28,6 +28,15 @@ export function initGestures(root = document.body) {
       MAX_TIME: 800
     };
   }
+// Helper: open controls/nav the same way 'm' does in ui.js
+function openControls() {
+  // Primary path used by ui.js hotkey
+  if (window.ControlsVisibility?.show) {
+    try { window.ControlsVisibility.show(); return; } catch {}
+  }
+  // Fallback: broadcast a custom event some UI layer can listen for
+  window.dispatchEvent(new CustomEvent('ui:controls:show'));
+}
 
  function synthKey(key, opts = {}) {
    // Map physical key -> code
@@ -106,7 +115,55 @@ export function initGestures(root = document.body) {
     }
   }
 
-  function onEnd() {
+function onEnd(e) {
+  if (!tracking) return;
+  tracking = false;
+
+  const dt = Date.now() - startT;
+  const { MIN_DIST, MAX_OFF_AXIS, MAX_TIME } = thresholds();
+  const dx = movedX;
+  const dy = movedY;
+  const absX = Math.abs(dx), absY = Math.abs(dy);
+
+  // --- NEW: bottom-edge tap opens controls/nav ---
+  // Treat a quick, tiny movement as a tap; use the start point
+  const TAP_TIME = 300, TAP_MOVE = 10, EDGE_PX = 24;
+  const H = window.innerHeight || document.documentElement.clientHeight || 0;
+  const isTap = (dt <= TAP_TIME && absX < TAP_MOVE && absY < TAP_MOVE);
+  if (isTap && H && startY >= H - EDGE_PX) {
+    // Mirror your 'm' hotkey path
+    window.ControlsVisibility?.show?.() ||
+    window.dispatchEvent(new CustomEvent('ui:controls:show'));
+    return;
+  }
+
+  if (dt > MAX_TIME) return;
+  if (absX < MIN_DIST && absY < MIN_DIST) return;
+
+  if (absX >= absY && absY <= MAX_OFF_AXIS) {
+    // Horizontal
+    if (dx > 0) {
+      // RIGHT: family forward (']')
+      synthKey(']');
+    } else {
+      // LEFT: family backward ('[')
+      synthKey('[');
+    }
+  } else if (absY > absX && absX <= MAX_OFF_AXIS) {
+    // Vertical
+    if (dy < 0) {
+      // UP: flavor forward (Shift+']')
+      synthKey(']', { shiftKey: true });
+    } else {
+      // DOWN: theme cycle (keeps your old gesture)
+      cycleTheme();
+    }
+  }
+}
+
+
+
+  /*function onEnd() {
     if (!tracking) return;
     tracking = false;
 
@@ -138,7 +195,7 @@ export function initGestures(root = document.body) {
         cycleTheme();
       }
     }
-  }
+  }*/
 
   function onCancel() {
     tracking = false;
