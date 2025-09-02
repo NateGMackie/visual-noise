@@ -6,6 +6,10 @@ export const fireAscii = (() => {
   // Classic ASCII shade ramp
   const SHADES = [' ', '.', ':', '-', '~', '*', '+', '=', '%', '#', '@'];
 
+  // Coarse cell targets (CSS px per cell)
+  const SCALE_X = 7;   // ~chars per 7px horizontally
+  const SCALE_Y = 11;  // ~chars per 11px vertically
+
   // --- Speed model ---
   // idx ∈ [1..12]; 6 is a nice default. Higher = hotter (more fuel, less cooling).
   const speedModel = {
@@ -32,7 +36,19 @@ export const fireAscii = (() => {
   let emberChance = 0.5;
   let coolBase = 3.0;
 
-  // DPR-safe reset
+  // --- Geometry/state rebuild (no drawing) ---
+  function rebuild(ctx) {
+    const cssW = Math.max(1, ctx.w / ctx.dpr);
+    const cssH = Math.max(1, ctx.h / ctx.dpr);
+
+    // Minimum grid sizes keep math sane on tiny viewports
+    Wc = Math.max(20, Math.floor(cssW / SCALE_X));
+    Hc = Math.max(12, Math.floor(cssH / SCALE_Y));
+
+    heat = new Uint8Array(Wc * Hc);
+  }
+
+  // DPR-safe reset (call at init, not per-frame)
   function resetCanvasState(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -42,16 +58,27 @@ export const fireAscii = (() => {
     g.shadowColor = 'rgba(0,0,0,0)';
   }
 
-  function init(ctx) { resetCanvasState(ctx); resize(ctx); }
+  function init(ctx) {
+    resetCanvasState(ctx);
+    rebuild(ctx);
+  }
+
+  function resize(ctx) {
+    // Recompute coarse grid & buffers from scratch (no recursion with init).
+    rebuild(ctx);
+  }
+
   function start() { running = true; }
   function stop()  { running = false; }
-  function clear(ctx){ if (heat) heat.fill(0); ctx.ctx2d.clearRect(0,0,ctx.w,ctx.h); }
 
-  function resize(ctx){
-  // Recompute coarse grid & ASCII ramp bounds from scratch.
-  init(ctx);
-}
-
+  function clear(ctx) {
+    if (heat) heat.fill(0);
+    const g = ctx.ctx2d;
+    g.save();
+    g.setTransform(1,0,0,1,0,0);
+    g.clearRect(0, 0, ctx.w, ctx.h); // device pixels
+    g.restore();
+  }
 
   function applySpeed(ctx) {
     // Accept several shapes for ctx.speed:
@@ -67,7 +94,10 @@ export const fireAscii = (() => {
     coolBase    = p.coolBase;
   }
 
-  function frame(ctx){
+  function frame(ctx) {
+    // If something created us before init/resize ran, be defensive:
+    if (!Wc || !Hc || !heat) rebuild(ctx);
+
     applySpeed(ctx);
 
     const g = ctx.ctx2d;
@@ -105,8 +135,8 @@ export const fireAscii = (() => {
     g.fillStyle = readVar('--bg', '#000');
     g.fillRect(0, 0, W, H);
 
-    const cellW = Math.ceil(W / Wc);
-    const cellH = Math.ceil(H / Hc);
+    const cellW = Math.max(1, Math.ceil(W / Wc));
+    const cellH = Math.max(1, Math.ceil(H / Hc));
 
     g.font = `${Math.max(10, cellH)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     g.textBaseline = 'top';

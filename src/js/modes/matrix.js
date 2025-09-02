@@ -60,7 +60,12 @@ g.shadowColor = 'rgba(0,0,0,0)';
 
     calc(ctx); 
   }
-  function resize(ctx){ calc(ctx); }
+  function resize(ctx){
+  // Rebuild everything on geometry/DPR change so scale & grid are correct.
+  // This mirrors the behavior you already liked on mode switches.
+  init(ctx);
+}
+
   function start(){ running = true; }
   function stop(){ running = false; }
 

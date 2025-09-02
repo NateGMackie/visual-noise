@@ -25,7 +25,11 @@ g.shadowBlur = 0;
 g.shadowColor = 'rgba(0,0,0,0)';
 
     calc(ctx); }
-  function resize(ctx){ calc(ctx); }
+  function resize(ctx){
+  // Ensure DPR transform + column math come from a fresh init.
+  init(ctx);
+}
+
   function start(){ running = true; }
   function stop(){ running = false; }
   function clear(ctx){

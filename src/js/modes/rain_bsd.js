@@ -29,7 +29,10 @@ g.shadowColor = 'rgba(0,0,0,0)';
 
     compute(ctx); 
   }
-  function resize(ctx){ compute(ctx); }
+  function resize(ctx){
+  // Re-init to rebuild droplet state, cell sizes, and DPR transform.
+  init(ctx);
+}
   function start(){ running = true; }
   function stop(){ running = false; }
   function clear(ctx){ drops = []; ctx.ctx2d.clearRect(0,0,ctx.w,ctx.h); }
