@@ -70,7 +70,7 @@ export const registry = {
 
     rain: {
       name: 'rain',
-      modesOrder: ['matrix', 'bsd', 'digitalrain'],
+      modesOrder: ['matrix', 'bsd', 'digitalrain', 'drizzle'],
       modes: {
         matrix: {
           name: 'matrix',
@@ -95,6 +95,14 @@ export const registry = {
             classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 }
           },
           impl: 'digitalrain',
+        },
+        drizzle: {
+          name: 'drizzle',
+          flavorsOrder: ['classic'],
+          flavors: {
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 }
+          },
+          impl: 'drizzle',
         },
       },
     },
@@ -260,8 +268,10 @@ export const taxonomy = {
   mining:      { family: 'developer', typeLabel: 'mining' },
   // rain
   matrix:      { family: 'rain',      typeLabel: 'matrix' },
+  bsd:         { family: 'rain',      typeLabel: 'bsd' },          // <-- add this
   rain_bsd:    { family: 'rain',      typeLabel: 'bsd' },
   digitalrain: { family: 'rain',      typeLabel: 'digital rain' },
+  drizzle:     { family: 'rain',      typeLabel: 'drizzle' },
   // fire
   fire:        { family: 'fire',      typeLabel: 'fire' },
   fireAscii:   { family: 'fire',      typeLabel: 'fireAscii' },

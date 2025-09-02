@@ -7,6 +7,7 @@ import { mining } from './mining.js';
 import { matrix } from './matrix.js';  
 import { digitalrain } from './digitalrain.js';
 import { rain_bsd } from './rain_bsd.js';
+import { drizzle } from './drizzle.js';
 import { fire } from './fire.js';
 import { fireAscii } from './fire_ascii.js';
 
@@ -18,9 +19,10 @@ export const registry = {
   mining,
   matrix,
   digitalrain,
-  rain_bsd,
+  bsd: rain_bsd,
+  drizzle,
   fire,
-  fire_ascii: fireAscii,
+  fireAscii,
 };
 
 export const variantsByFamily = (family) =>
