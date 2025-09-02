@@ -6,86 +6,64 @@ import { initUI } from './ui/ui.js';
 import { initGestures } from './ui/gestures.js';
 import { initNotify } from './ui/notify.js';
 
+// One toast HUD instance
 initNotify({ bus: { on }, labelsForMode });
 
+// --- Canvas / 2D context ---
 const canvas = document.getElementById('canvas');
 const g = canvas.getContext('2d', { alpha: false });
 
+// --- Render context passed to modes ---
 const ctx = {
-  canvas, ctx2d: g, dpr: 1, w: 0, h: 0,
+  canvas,
+  ctx2d: g,
+  dpr: 1,
+  w: 0, h: 0,
   now: 0, elapsed: 0, dt: 0,
   speed: cfg.speed,
   paused: cfg.paused,
-  bus: { on },
+  needsFullClear: false,
 };
 
-let loopId = null;
+// Track last measured viewport/DPR
+let lastSize = { w: 0, h: 0, dpr: 0 };
+
+// --- Active mode orchestration ---
 let activeModule = null;
+let loopId = 0;
 let lastT = performance.now();
 let stopGestures = null;
 
-/* ---------- helpers ---------- */
-function hardClear(c) {
-  const g = c.ctx2d, cv = c.canvas;
+// --- Utilities ---
+function hardClear(ctx){
+  // Clear the full device-pixel surface regardless of current transform
   g.save();
   g.setTransform(1,0,0,1,0,0);
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.shadowBlur = 0;
-  g.shadowColor = 'rgba(0,0,0,0)';
-  g.clearRect(0, 0, cv.width, cv.height);
+  g.clearRect(0, 0, ctx.w, ctx.h);
   g.restore();
 }
 
-function fit() {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
-
-  // device-pixel surface size
-  const devW = Math.max(1, Math.floor(rect.width  * dpr));
-  const devH = Math.max(1, Math.floor(rect.height * dpr));
-
-  // expose device px to modes (matches your existing expectations)
-  ctx.dpr = dpr;
-  ctx.w = devW;
-  ctx.h = devH;
-
-  // resize backing store only when needed
-  if (canvas.width !== devW)  canvas.width  = devW;
-  if (canvas.height !== devH) canvas.height = devH;
-
-  // draw in device px (identity transform)
-  g.setTransform(1, 0, 0, 1, 0, 0);
-
-  activeModule?.resize?.(ctx);
+function refreshLikeModeChange(){
+  // Make resizes/rotations visually identical to a mode switch
+  fit({ force: true, fullClear: true });
+  ctx.needsFullClear = true;
 }
 
-
-
-/*function fit(){
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  ctx.dpr = dpr;
-  const rect = canvas.getBoundingClientRect();
-  ctx.w = Math.floor(rect.width * dpr);
-  ctx.h = Math.floor(rect.height * dpr);
-  canvas.width = ctx.w;
-  canvas.height = ctx.h;
-  g.setTransform(dpr,0,0,dpr,0,0);
-  activeModule?.resize?.(ctx);
-}*/
-
-
-/* ---------- loop ---------- */
-function run(t) {
+// Keep DPR scale active every frame (bulletproof against modes that only set it in init())
+function run(t){
   const raw = t - lastT;
   lastT = t;
 
+  // clamp/apply speed
   const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
-  ctx.elapsed = Math.min(raw * s, 100);
+  ctx.elapsed = ctx.paused ? 0 : Math.min(raw * s, 100);
   ctx.dt = ctx.elapsed / 1000;
   ctx.now = t;
 
-  if (ctx.needsFullClear) {
+  // Always render in CSS pixels → apply current DPR transform each frame
+  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+
+  if (ctx.needsFullClear){
     hardClear(ctx);
     ctx.needsFullClear = false;
   }
@@ -94,62 +72,114 @@ function run(t) {
   loopId = requestAnimationFrame(run);
 }
 
-/* ---------- modes ---------- */
-function startModeByName(modeName) {
+// Size canvas backing store to viewport; do NOT set transform here
+function fit({ force = false, fullClear = false } = {}){
+  // Viewport CSS pixels
+  const w = Math.max(1, Math.round(window.innerWidth  || 1));
+  const h = Math.max(1, Math.round(window.innerHeight || 1));
+
+  // Reasonable DPR cap
+  const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
+
+  if (!force && w === lastSize.w && h === lastSize.h && dpr === lastSize.dpr) return;
+  lastSize = { w, h, dpr };
+
+  // Device-pixel surface
+  const devW = Math.max(1, Math.floor(w * dpr));
+  const devH = Math.max(1, Math.floor(h * dpr));
+
+  ctx.dpr = dpr;
+  ctx.w = devW;
+  ctx.h = devH;
+
+  if (canvas.width !== devW)  canvas.width  = devW;
+  if (canvas.height !== devH) canvas.height = devH;
+
+  if (fullClear) hardClear(ctx);
+
+  // Let mode react to size change
+  activeModule?.resize?.(ctx);
+}
+
+// Mode bootstrapper
+function startModeByName(modeName){
   if (loopId) cancelAnimationFrame(loopId);
   activeModule?.stop?.(ctx);
 
-  hardClear(ctx);
-  ctx.needsFullClear = true;
+  // Sizing + visual hygiene first
+  refreshLikeModeChange();
 
   activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
   // Footer labels
+  const { familyLabel, typeLabel } = labelsForMode(modeName);
   const modeEl = document.getElementById('modeName');
   const typeEl = document.getElementById('typeName');
-  const { familyLabel, typeLabel } = labelsForMode(modeName);
   if (modeEl) modeEl.textContent = familyLabel;
   if (typeEl) typeEl.textContent = typeLabel;
 
   activeModule?.init?.(ctx);
   activeModule?.start?.(ctx);
+
   lastT = performance.now();
   loopId = requestAnimationFrame(run);
 }
 
-/* ---------- events ---------- */
+// --------- Init UI / gestures / themes ---------
+initThemes();
+initUI();
+stopGestures = initGestures?.();
+
+// --------- Window & document events ---------
 // Throttled resize
 let resizeRaf = 0;
 window.addEventListener('resize', () => {
   if (resizeRaf) return;
-  resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; fit(); });
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = 0;
+    refreshLikeModeChange();
+  });
 }, { passive: true });
 
-// Orientation: let it settle, then measure
-window.addEventListener('orientationchange', () => setTimeout(fit, 150), { passive: true });
+// Orientation change
+window.addEventListener('orientationchange', () => {
+  setTimeout(refreshLikeModeChange, 150);
+}, { passive: true });
 
-/* ---------- init ---------- */
-initThemes();
-initUI();
-stopGestures = initGestures(document.body);
-window.addEventListener('beforeunload', () => { if (typeof stopGestures === 'function') stopGestures(); });
-
-on('theme', applyTheme);
-on('mode', startModeByName);
-on('flavor', ({ flavorId }) => {
-  hardClear(ctx);
-  ctx.needsFullClear = true;
-  if (activeModule?.setFlavor) activeModule.setFlavor(ctx, flavorId);
-  else { activeModule?.stop?.(ctx); activeModule?.init?.(ctx); activeModule?.start?.(ctx); }
-  const typeEl = document.getElementById('typeName'); if (typeEl) typeEl.textContent = flavorId;
+// Fullscreen changes can alter viewport size
+document.addEventListener('fullscreenchange', () => {
+  setTimeout(refreshLikeModeChange, 50);
 });
 
-on('speed', (s) => { ctx.speed = s; });
+// --------- Bus wiring ---------
+on('mode', (modeName) => {
+  startModeByName(modeName);
+});
+
+on('theme', (themeName) => {
+  applyTheme(themeName);
+});
+
+on('flavor', (flavorId) => {
+  if (!activeModule) return;
+  if (activeModule.setFlavor){
+    activeModule.setFlavor(ctx, flavorId);
+  } else {
+    // Fallback: re-init to pick up flavor changes for older modes
+    activeModule.stop?.(ctx);
+    activeModule.init?.(ctx);
+    activeModule.start?.(ctx);
+  }
+  const typeEl = document.getElementById('typeName');
+  if (typeEl) typeEl.textContent = flavorId;
+});
+
+on('speed',  (s) => { ctx.speed  = s; });
 on('paused', (p) => { ctx.paused = p; });
 on('clear',  () => { activeModule?.clear?.(ctx); });
 
-// Boot once: measure → then start
+// --------- Boot ---------
 requestAnimationFrame(() => {
-  fit();
+  refreshLikeModeChange();
   startModeByName(cfg.persona);
 });

@@ -84,6 +84,7 @@ function onKey(e){
   // API
   function init(ctx){ 
     // At the very top of each mode's init(ctx)
+    
 const g = ctx.ctx2d;
 g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
 g.globalAlpha = 1;
@@ -102,6 +103,10 @@ g.shadowColor = 'rgba(0,0,0,0)';
     heat = new Uint8Array(Wc * Hc);
     fuelRows = Math.max(1, Math.round(Hc * FUEL_ROWS_FRAC));
   }
+function resize(ctx){
+  // Recreate buffers/width/height with the new geometry + DPR.
+  init(ctx);
+}
 
   // Simulation
   function stepSim(){

@@ -48,12 +48,10 @@ export const fireAscii = (() => {
   function clear(ctx){ if (heat) heat.fill(0); ctx.ctx2d.clearRect(0,0,ctx.w,ctx.h); }
 
   function resize(ctx){
-    const W = Math.floor((ctx.w / ctx.dpr) / 6);   // wider cells → coarser grid
-    const H = Math.floor((ctx.h / ctx.dpr) / 10);  // taller cells
-    Wc = Math.max(20, W);
-    Hc = Math.max(12, H);
-    heat = new Uint8Array(Wc * Hc);
-  }
+  // Recompute coarse grid & ASCII ramp bounds from scratch.
+  init(ctx);
+}
+
 
   function applySpeed(ctx) {
     // Accept several shapes for ctx.speed:
