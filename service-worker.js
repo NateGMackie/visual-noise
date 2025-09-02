@@ -1,5 +1,5 @@
 /* Ambient Visual Noise – Service Worker */
-const VERSION = 'avn-2025-09-01-v1.1';
+const VERSION = 'avn-2025-09-02-v1';
 const STATIC_CACHE = `static-${VERSION}`;
 const OFFLINE_FALLBACK = 'index.html'; // relative to SW scope
 
