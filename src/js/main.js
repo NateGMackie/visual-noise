@@ -5,7 +5,9 @@ import { installTerminologyAliases } from './compat/terminology_shim.js';
 
 // 2) Create the app container and install the aliases BEFORE anything else touches state/events
 const app = window.app || { state: {}, ui: {}, events: window.events };
+window.app = app;   
 installTerminologyAliases(app);
+
 
 // 3) Dynamically import everything else AFTER the shim is installed
 (async () => {
@@ -25,7 +27,7 @@ installTerminologyAliases(app);
     import('./ui/notify.js')
   ]);
 
-  const { cfg, on, labelsForMode } = stateMod;
+  const { cfg, on, labelsForMode, labelsForGenreStyle } = stateMod;
   const { initThemes, applyTheme } = themesMod;
   const { registry: modeRegistry } = modesMod;
   const { initUI } = uiMod;
@@ -138,11 +140,26 @@ installTerminologyAliases(app);
     activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
     // Footer labels
-    const { familyLabel, typeLabel } = labelsForMode(modeName);
-    const modeEl = document.getElementById('modeName');
-    const typeEl = document.getElementById('typeName');
-    if (modeEl) modeEl.textContent = familyLabel;
-    if (typeEl) typeEl.textContent = typeLabel;
+// Footer labels
+let genreLabel, styleLabel;
+if (typeof labelsForGenreStyle === 'function') {
+  const out = labelsForGenreStyle(modeName);
+  genreLabel = out.genreLabel;
+  styleLabel = out.styleLabel;
+} else {
+  const { familyLabel, typeLabel } = labelsForMode(modeName);
+  genreLabel = familyLabel;
+  styleLabel = typeLabel;
+}
+
+// Prefer new IDs; fall back to old ones for one release
+const genreEl = document.getElementById('genreName') || document.getElementById('modeName');
+const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
+if (genreEl) genreEl.textContent = genreLabel;
+if (styleEl) styleEl.textContent = styleLabel;
+// (Remove any line that sets vibeEl from an undefined vibeLabel)
+
+
 
     activeModule?.init?.(ctx);
     activeModule?.start?.(ctx);
@@ -178,35 +195,45 @@ installTerminologyAliases(app);
   });
 
   // ---------- Bus wiring ----------
-  on('mode', (modeName) => {
-    startModeByName(modeName);
-  });
+// ---------- Bus wiring ----------
+function handleStyleOrFlavor(id) {
+  if (!activeModule) return;
+  if (activeModule.setFlavor) {
+    activeModule.setFlavor(ctx, id);
+  } else {
+    activeModule.stop?.(ctx);
+    activeModule.init?.(ctx);
+    activeModule.start?.(ctx);
+  }
+  const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
+  if (styleEl) styleEl.textContent = id;
+}
 
-  on('theme', (themeName) => {
-    applyTheme(themeName);
-  });
+function handleVibe(v) {
+  applyTheme(v);
+  const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
+  if (vibeEl) vibeEl.textContent = v;
+}
 
-  on('flavor', (flavorId) => {
-    if (!activeModule) return;
-    if (activeModule.setFlavor){
-      activeModule.setFlavor(ctx, flavorId);
-    } else {
-      // Fallback: re-init to pick up flavor changes for older modes
-      activeModule.stop?.(ctx);
-      activeModule.init?.(ctx);
-      activeModule.start?.(ctx);
-    }
-    const typeEl = document.getElementById('typeName');
-    if (typeEl) typeEl.textContent = flavorId;
-  });
+// Legacy + new events (both supported during migration)
+on('mode',   (name) => { startModeByName(name); });
+on('flavor', (id)   => { handleStyleOrFlavor(id); });
+on('theme',  (v)    => { handleVibe(v); });
 
-  on('speed',  (s) => { ctx.speed  = s; });
-  on('paused', (p) => { ctx.paused = p; });
-  on('clear',  () => { activeModule?.clear?.(ctx); });
+on('genre',  (name) => { startModeByName(name); });
+on('style',  (id)   => { handleStyleOrFlavor(id); });
+on('vibe',   (v)    => { handleVibe(v); });
+
+on('speed',  (s) => { ctx.speed  = s; });
+on('paused', (p) => { ctx.paused = p; });
+on('clear',  () => { activeModule?.clear?.(ctx); });
 
   // ---------- Boot ----------
   requestAnimationFrame(() => {
     refreshLikeModeChange();
     startModeByName(cfg.persona);
+
+   const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
+   if (vibeEl && (cfg.vibe || cfg.theme)) vibeEl.textContent = (cfg.vibe || cfg.theme);
   });
 })();
