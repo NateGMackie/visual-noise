@@ -143,20 +143,20 @@ function onEnd(e) {
   if (absX >= absY && absY <= MAX_OFF_AXIS) {
     // Horizontal
     if (dx > 0) {
-      // RIGHT: family forward (']')
-      synthKey(']');
-    } else {
-      // LEFT: family backward ('[')
+      // RIGHT: family backward ('[')
       synthKey('[');
+    } else {
+      // LEFT: family forward (']')
+      synthKey(']');
     }
   } else if (absY > absX && absX <= MAX_OFF_AXIS) {
     // Vertical
     if (dy < 0) {
-      // UP: flavor forward (Shift+']')
-      synthKey(']', { shiftKey: true });
+      // UP: vibe forward 
+      synthKey('t');
     } else {
-      // DOWN: theme cycle (keeps your old gesture)
-      cycleTheme();
+      // DOWN: cycle style (Shift+']')
+      synthKey(']', { shiftKey: true });
     }
   }
 }

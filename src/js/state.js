@@ -25,7 +25,7 @@ export function emit(evt, data){ listeners.get(evt)?.forEach(fn => fn(data)); }
 
 // -------------------------
 // NEW: Single Source of Truth
-// family -> mode -> flavor
+// genre -> style -> vibe
 // -------------------------
 export const registry = {
   order: ['system', 'developer', 'rain', 'fire'],
@@ -289,11 +289,12 @@ export function labelsForMode(id){
   return { familyLabel: t.family, typeLabel: t.typeLabel };
 }
 
+// state.js — append near labelsForMode export
+export function labelsForGenreStyle(name) {
+  const { familyLabel, typeLabel } = labelsForMode(name);
+  return { genreLabel: familyLabel, styleLabel: typeLabel };
+}
 
-
-
-
-// Speed / Pause / Clear (unchanged public surface)
 export function incSpeed(f = 1.2){ setSpeed((active.speed ?? cfg.speed) * f); }
 export function decSpeed(f = 1/1.2){ setSpeed((active.speed ?? cfg.speed) * f); }
 export function togglePause(){ cfg.paused = !cfg.paused; emit('paused', cfg.paused); }

@@ -1,7 +1,8 @@
 // src/js/ui/ui.js
 import { cfg, setMode, incSpeed, decSpeed, togglePause, clearAll, labelsForMode } from '../state.js';
-import { cycleTheme, themeNames, setThemeByName } from '../themes.js';
 import { registry } from '../modes/index.js';
+import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
+
 
 // --- ControlsVisibility shim ---
 // Aligns with styles.css (#controls.is-visible + body.has-controls-visible)
@@ -110,14 +111,16 @@ function makeClickable(el, onActivate){
 }
 
 export function initUI(){
-  // Footer controls (labels double as buttons now)
-  const modeBtn   = document.getElementById('modeBtn');     // optional legacy button
-  const themeBtn  = document.getElementById('themeBtn');    // optional legacy button
-  const modeName  = document.getElementById('modeName');    // span that holds just the mode name
-  const typeName  = document.getElementById('typeName');    // span that holds the type label
-  const themeName = document.getElementById('themeName');   // span that holds just the theme name
-  const fullBtn   = document.getElementById('fullBtn');
-  // Removed: dock button (no-op in current layout)
+// Footer controls (labels double as buttons now)
+const modeBtn   = document.getElementById('modeBtn');     // optional legacy button
+const themeBtn  = document.getElementById('themeBtn');    // optional legacy button
+
+// Prefer new IDs, fall back to legacy for one release
+const modeName  = document.getElementById('genreName') || document.getElementById('modeName');
+const typeName  = document.getElementById('styleName') || document.getElementById('typeName');
+const themeName = document.getElementById('vibeName')  || document.getElementById('themeName');
+
+const fullBtn   = document.getElementById('fullBtn');
 
   // Optional extras if you re-add them
   const speedUpBtn   = document.getElementById('speedUp');
@@ -140,7 +143,8 @@ export function initUI(){
   if (modeBtn)  modeBtn.onclick  = () => { setMode(modes[(modes.indexOf(cfg.persona)+1) % modes.length]); setModeLabel(); };
   if (themeBtn) themeBtn.onclick = () => {
     if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function'){
-      const cur = (themeName?.textContent || '').trim();
+      const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
+
       const idx = Math.max(0, themeNames.indexOf(cur));
       const next = themeNames[(idx + 1) % themeNames.length];
       setThemeByName(next);
@@ -156,7 +160,8 @@ export function initUI(){
   makeClickable(modeLabelEl,  () => { setMode(modes[(modes.indexOf(cfg.persona)+1) % modes.length]); setModeLabel(); });
   makeClickable(themeLabelEl, () => {
     if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function'){
-      const cur = (themeName?.textContent || '').trim();
+      const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
+
       const idx = Math.max(0, themeNames.indexOf(cur));
       const next = themeNames[(idx + 1) % themeNames.length];
       setThemeByName(next);
@@ -279,7 +284,8 @@ export function initUI(){
     if (k === 't') {
       e.preventDefault();
       if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function'){
-        const cur = (themeName?.textContent || '').trim();
+        const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
+
         let i = Math.max(0, themeNames.indexOf(cur));
         i = e.shiftKey ? (i - 1 + themeNames.length) % themeNames.length
                        : (i + 1) % themeNames.length;
