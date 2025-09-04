@@ -1,124 +1,220 @@
-// Console-style sysadmin stream: services, ping, disk, kube, nginx, auth, cron.
+// src/js/modes/sysadmin.js
+/* eslint-env browser */
 
+import { randInt } from '../lib/index.js';
+
+/**
+ * Sysadmin console: emits status lines (CPU/MEM/NET/DISK) with light trail.
+ * Exports the standard mode API: init, resize, start, stop, frame, clear.
+ */
 export const sysadmin = (() => {
-let fontSize = 16, lineH = 18, rows = 40, cols = 80;
-let buffer = [];
-let maxLines = 200;
-let emitAcc = 0;
-let emitEvery = 200; // slower baseline for readability
-let running = false;
-let cursorBlink = 0;
+  // ------- internal state -------
+  let fontSize = 16;
+  let lineH = 18;
+  let cols = 80;
+  let rows = 40;
 
-const spinner = ['⠁','⠃','⠇','⠧','⠷','⠿','⠟','⠻','⠹','⠸'];
-let spinIdx = 0;
+  /** @type {string[]} ring buffer of recent lines */
+  let buffer = [];
+  let maxLines = 200;
 
-function push(l){
-  buffer.push(l);
-  if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
-}
-function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
-function ip(){ return `${randInt(10,223)}.${randInt(0,255)}.${randInt(0,255)}.${randInt(1,254)}`; }
-function pod(){ return `web-${randInt(1,3)}-` + Math.random().toString(36).slice(2,7); }
-function svc(){ return ['nginx','redis','postgres','queue','authd','filesync'][randInt(0,5)]; }
+  let running = false;
+  let emitAccumulator = 0; // ms since last line emission
+  let emitIntervalMs = 140; // cadence in stream mode
 
-function sample(){
-  const r = Math.random();
+  // palette (reads from CSS variables)
+  const readVar = (name, fallback) =>
+    window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
-  if (r < 0.18){
-    push(`systemd: ${svc()}.service active (running) pid=${randInt(200,9000)} mem=${(Math.random()*512).toFixed(1)}Mi`);
-  } else if (r < 0.32){
-    push(`nginx: 200 GET /healthz ${randInt(1,3)}ms • 200 GET / ${randInt(5,28)}ms • 404 /favicon.ico ${randInt(0,2)}ms`);
-  } else if (r < 0.46){
-    push(`sshd: accepted password for deploy from ${ip()} port ${randInt(20000,65000)} ssh2`);
-  } else if (r < 0.60){
-    spinIdx = (spinIdx+1) % spinner.length;
-    push(`ping ${spinner[spinIdx]} ${ip()} time=${(Math.random()*40+2).toFixed(2)} ms`);
-  } else if (r < 0.74){
-    const used = randInt(32, 95);
-    push(`disk: /dev/sda1 ${used}% used • /var ${randInt(18,88)}% • inode ${randInt(20,70)}%`);
-  } else if (r < 0.86){
-    push(`cron: (${['root','app','backup'][randInt(0,2)]}) CMD (${['logrotate','pg_dump','cache:warm'][randInt(0,2)]}) EXIT=0`);
-  } else if (r < 0.94){
-    push(`kube: pod ${pod()} Ready 1/1 • restart=${randInt(0,3)} • node=ip-${ip().replace(/\./g,'-')}`);
-  } else {
-    push(`audit: user=${['deploy','svc_web','svc_queue'][randInt(0,2)]} sudo=${['ALLOW','ALLOW','DENY'][randInt(0,2)]} cmd="${['systemctl status','journalctl -xe','kubectl logs'][randInt(0,2)]}"`);
+  // ------- line generators -------
+  const barFill = '█';
+  const barEmpty = '·';
+
+  /**
+   * Make a fixed-width bar for percentages.
+   * @param {number} pct - 0..100
+   * @param {number} [width] - bar character width
+   * @returns {string} ASCII bar visualization for the given percentage.
+   */
+  function makeBar(pct, width = 20) {
+    const p = Math.max(0, Math.min(100, pct));
+    const filled = Math.round((p / 100) * width);
+    return barFill.repeat(filled) + barEmpty.repeat(width - filled);
   }
 
-  if (Math.random() < 0.10){
-    push(`journal: write=${(Math.random()*2.4).toFixed(2)}MB/s rotate=${randInt(5,24)}h max=1.0GB`);
-  }
-}
+  const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
-function init(ctx){
-  // At the very top of each mode's init(ctx)
-const g = ctx.ctx2d;
-g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0); // keep your DPR scale
-g.globalAlpha = 1;
-g.globalCompositeOperation = 'source-over';
-g.shadowBlur = 0;
-g.shadowColor = 'rgba(0,0,0,0)';
-
-  fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
-  lineH = Math.floor(fontSize * 1.15);
-  rows = Math.floor((ctx.h/ctx.dpr) / lineH);
-  cols = Math.floor((ctx.w/ctx.dpr) / (fontSize*0.62));
-  buffer = [];
-  maxLines = rows * 5;
-  lastEmit = 0;
-}
-
-function resize(ctx){
-  init(ctx);
-}
-
-function start(){ running = true; }
-function stop(){ running = false; }
-
-function frame(ctx){
-  const g = ctx.ctx2d;
-  const W = ctx.w/ctx.dpr, H = ctx.h/ctx.dpr;
-
- if (running && !ctx.paused){
-  emitAcc += ctx.elapsed;
-  const step = emitEvery; // already scaled globally by main.js
-  while (emitAcc >= step){
-    sample();
-    emitAcc -= step;
-  }
- }
-
-  // subtle persistence
-  g.fillStyle = 'rgba(0,0,0,0.20)';
-  g.fillRect(0,0,W,H);
-
- if (running && !ctx.paused){
-   // accumulate elapsed that already includes global speed scaling
-   lastEmit += ctx.elapsed;
-   while (lastEmit >= emitEvery){
-     sample();
-     lastEmit -= emitEvery;
-   }
- }
-
-  const start = Math.max(0, buffer.length - rows);
-  const lines = buffer.slice(start);
-
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-  g.textBaseline = 'top';
-  const fg = getComputedStyle(document.documentElement).getPropertyValue('--fg') || '#03ffaf';
-  g.fillStyle = fg.trim() || '#03ffaf';
-
-  let y = 4;
-  const xPad = 8;
-
-  for (let i=0;i<lines.length;i++){
-    const t = lines[i];
-    g.fillText(t.length > cols ? t.slice(0, cols-1)+'…' : t, xPad, y);
-    y += lineH;
+  /**
+   * Push a line into the ring buffer.
+   * @param {string} l - line to add
+   * @returns {void}
+   */
+  function push(l) {
+    buffer.push(l);
+    if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
   }
 
-  cursorBlink = (cursorBlink + ctx.elapsed) % 1000;
-  if (cursorBlink < 520){
-    g.fillText('▍', xPad, y);
+  /**
+   * Compose one sysadmin-flavored line.
+   * @returns {string} A formatted log/status line (CPU/MEM/DISK/NET or INFO/WARN/etc.).
+   */
+  function makeLine() {
+    const r = Math.random();
+    if (r < 0.2) {
+      // CPU
+      const core = randInt(0, 7);
+      const pct = randInt(1, 99);
+      return `[${timeStamp()}] CPU${core}  ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
+    }
+    if (r < 0.4) {
+      // MEM
+      const pct = randInt(10, 97);
+      return `[${timeStamp()}] MEM    ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
+    }
+    if (r < 0.6) {
+      // DISK
+      const d = ['sda', 'sdb', 'nvme0n1'][randInt(0, 2)];
+      const pct = randInt(5, 98);
+      return `[${timeStamp()}] DISK   ${d}  ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
+    }
+    if (r < 0.8) {
+      // NET
+      const ifc = ['eth0', 'wlan0', 'lo'][randInt(0, 2)];
+      const up = (randInt(1, 950) / 10).toFixed(1);
+      const dn = (randInt(1, 950) / 10).toFixed(1);
+      return `[${timeStamp()}] NET    ${ifc}  ↑${up}MB/s  ↓${dn}MB/s`;
+    }
+    // LOG
+    const lvls = ['INFO', 'WARN', 'DEBUG', 'TRACE'];
+    const msgs = [
+      'healthcheck ok',
+      'rotating logs',
+      'sync shards',
+      'gc complete',
+      'balancer tick',
+      'restart queued',
+      'config reload',
+      'no anomalies',
+    ];
+    const lvl = lvls[randInt(0, lvls.length - 1)];
+    const msg = msgs[randInt(0, msgs.length - 1)];
+    return `[${timeStamp()}] ${lvl.padEnd(5, ' ')} ${msg}`;
   }
-}})();
+
+  // ------- API: lifecycle & drawing -------
+
+  /**
+   * Initialize measurements, buffers, and baseline drawing state.
+   * @param {any} ctx - Render context ({ canvas, ctx2d, dpr, w, h, ... }).
+   * @returns {void}
+   */
+  function init(ctx) {
+    const g = ctx.ctx2d;
+
+    // Reset 2D defaults and DPR
+    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+
+    // Metrics from viewport
+    fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
+    lineH = Math.floor(fontSize * 1.15);
+    rows = Math.floor(ctx.h / ctx.dpr / lineH);
+    cols = Math.floor(ctx.w / ctx.dpr / (fontSize * 0.62));
+
+    // Buffers
+    buffer = [];
+    maxLines = rows * 5;
+
+    // Timers
+    emitAccumulator = 0;
+  }
+
+  /**
+   * Recompute metrics on resize/orientation changes.
+   * @param {any} ctx - Render context.
+   * @returns {void}
+   */
+  function resize(ctx) {
+    init(ctx);
+  }
+
+  /**
+   * Start emitting lines.
+   * @returns {void}
+   */
+  function start() {
+    running = true;
+  }
+
+  /**
+   * Stop emitting lines.
+   * @returns {void}
+   */
+  function stop() {
+    running = false;
+  }
+
+  /**
+   * Clear the canvas and line buffer.
+   * @param {any} ctx - Render context.
+   * @returns {void}
+   */
+  function clear(ctx) {
+    buffer = [];
+    ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
+  }
+
+  /**
+   * Draw one frame and advance the stream based on elapsed time.
+   * @param {any} ctx - Render context ({ ctx2d, dpr, w, h, elapsed, paused, speed }).
+   * @returns {void}
+   */
+  function frame(ctx) {
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+
+    // background trail
+    const bg = readVar('--bg', '#000') || '#000';
+    g.fillStyle = 'rgba(0,0,0,0.16)';
+    if (bg !== '#000') {
+      // in non-black themes, fade to theme bg for nicer blending
+      // (keep simple — drawing a translucent fill each frame)
+      g.fillStyle = 'rgba(0,0,0,0.16)';
+    }
+    g.fillRect(0, 0, W, H);
+
+    // emission timing (only when running and not paused)
+    if (running && !ctx.paused) {
+      emitAccumulator += ctx.elapsed;
+      while (emitAccumulator >= emitIntervalMs) {
+        emitAccumulator -= emitIntervalMs;
+        push(makeLine());
+      }
+    }
+
+    // visible slice
+    const lines = buffer.slice(Math.max(0, buffer.length - rows));
+
+    // text style
+    const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = fg;
+
+    // draw
+    let y = 4;
+    const xPad = 8;
+    for (let i = 0; i < lines.length; i++) {
+      const txt = lines[i];
+      const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
+      g.fillText(out, xPad, y);
+      y += lineH;
+    }
+  }
+
+  return { init, resize, start, stop, frame, clear };
+})();

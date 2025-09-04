@@ -1,0 +1,23 @@
+{
+  // Use Prettier for formatting and do it on save
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+
+  // Run ESLint fixes on save (unused vars, etc.)
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+
+  // Make ESLint aware of JS files
+  "eslint.validate": ["javascript"],
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+
+  // Only format files if a Prettier config exists (you have .prettierrc)
+  "prettier.requireConfig": true,
+
+  // Optional niceties
+  "files.eol": "\n",
+  "editor.trimAutoWhitespace": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2
+}
