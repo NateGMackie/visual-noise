@@ -57,7 +57,7 @@ function fit() {
   const dprGuess = window.devicePixelRatio || 1;
 
   ctx.dpr = Math.max(1, Math.min(dprGuess, 2));
-  ctx.w = ctx.canvas.width;  // device-pixel width
+  ctx.w = ctx.canvas.width; // device-pixel width
   ctx.h = ctx.canvas.height; // device-pixel height
 
   if (resized) {
@@ -252,18 +252,36 @@ function run(t) {
   }
 
   // Legacy names
-  on('mode',   (name) => { startModeByName(name); });
-  on('flavor', (id)   => { handleStyleOrFlavor(id); });
-  on('theme',  (v)    => { handleVibe(v); });
+  on('mode', (name) => {
+    startModeByName(name);
+  });
+  on('flavor', (id) => {
+    handleStyleOrFlavor(id);
+  });
+  on('theme', (v) => {
+    handleVibe(v);
+  });
 
   // New names
-  on('genre',  (name) => { startModeByName(name); });
-  on('style',  (id)   => { handleStyleOrFlavor(id); });
-  on('vibe',   (v)    => { handleVibe(v); });
+  on('genre', (name) => {
+    startModeByName(name);
+  });
+  on('style', (id) => {
+    handleStyleOrFlavor(id);
+  });
+  on('vibe', (v) => {
+    handleVibe(v);
+  });
 
-  on('speed',  (s) => { ctx.speed  = s; });
-  on('paused', (p) => { ctx.paused = p; });
-  on('clear',  () => { activeModule?.clear?.(ctx); });
+  on('speed', (s) => {
+    ctx.speed = s;
+  });
+  on('paused', (p) => {
+    ctx.paused = p;
+  });
+  on('clear', () => {
+    activeModule?.clear?.(ctx);
+  });
 
   // ---------- Boot ----------
   // Seed speed/paused from cfg (match your prior behavior)

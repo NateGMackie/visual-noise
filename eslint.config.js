@@ -11,7 +11,7 @@ import prettier from 'eslint-config-prettier';
 export default [
   // 0) Ignore patterns (replaces .eslintignore)
   {
-    ignores: ['node_modules/**', 'dist/**', 'build/**'],
+    ignores: ['node_modules/**', 'dist/**', 'build/**', 'src/js/compat/terminology_shim.js'],
   },
 
   // 1) Base recommended rules for JS
@@ -97,13 +97,13 @@ export default [
     },
   },
   {
-  files: ['src/compat/terminology_shim.js'],
-  rules: {
-    'jsdoc/require-jsdoc': 'off',
-    'jsdoc/require-param-description': 'off',
-    'jsdoc/require-returns-description': 'off',
-    'jsdoc/require-returns': 'off',
-    'jsdoc/no-undefined-types': 'off',
+    files: ['src/js/compat/terminology_shim.js'],
+    rules: {
+      'jsdoc/require-jsdoc': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/require-returns': 'off',
+      'jsdoc/no-undefined-types': 'off',
+    },
   },
-},
 ];

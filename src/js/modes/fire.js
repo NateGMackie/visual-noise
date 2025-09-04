@@ -112,7 +112,7 @@ export const fire = (() => {
 
   // Hotkeys (hold Shift)
   /**
-   * Handle Shift+Arrow hotkeys to tweak flame height and fuel band. 
+   * Handle Shift+Arrow hotkeys to tweak flame height and fuel band.
    * @param {*} e - KeyboardEvent from window.
    * @returns {void}
    */

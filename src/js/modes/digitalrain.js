@@ -8,13 +8,15 @@
  * Purpose: Vertical glyph streams that advance on a fixed tick.
  */
 export const digitalrain = (() => {
-  const GLYPHS = Array.from({ length: 96 }, (_, i) =>
-    String.fromCharCode(0x30a0 + (i % 96))
-  );
+  const GLYPHS = Array.from({ length: 96 }, (_, i) => String.fromCharCode(0x30a0 + (i % 96)));
 
   // state
-  let cols = 0, drops = [], fontSize = 16;
-  let running = false, tickAcc = 0, tickMs = 75;
+  let cols = 0,
+    drops = [],
+    fontSize = 16;
+  let running = false,
+    tickAcc = 0,
+    tickMs = 75;
 
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
@@ -55,9 +57,13 @@ export const digitalrain = (() => {
   }
 
   /** Start animation. @returns {void} */
-  function start() { running = true; }
+  function start() {
+    running = true;
+  }
   /** Stop animation.  @returns {void} */
-  function stop()  { running = false; }
+  function stop() {
+    running = false;
+  }
 
   /**
    * Clear canvas & reset drops.

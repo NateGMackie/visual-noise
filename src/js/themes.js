@@ -3,12 +3,12 @@ import { cfg } from './state.js';
 
 // Canonical palette definitions (vibe → CSS vars)
 const THEMES = {
-  classic:     { '--bg': '#000',    '--fg': '#03ffaf', '--accent': '#0ff' },
-  mainframe:   { '--bg': '#0a0700', '--fg': '#ffd18a', '--accent': '#ffae00' },
-  msdos:       { '--bg': '#1F1F1F', '--fg': '#C0C0C0', '--accent': '#FFFFFF' },
-  clu:         { '--bg': '#001318', '--fg': '#9de7ff', '--accent': '#2ad1ff' },
-  skynet:      { '--bg': '#0a0000', '--fg': '#ff4d4d', '--accent': '#ff0000' },
-  deepthought: { '--bg': '#0a0010', '--fg': '#e0b3ff', '--accent': '#aa33ff' }
+  classic: { '--bg': '#000', '--fg': '#03ffaf', '--accent': '#0ff' },
+  mainframe: { '--bg': '#0a0700', '--fg': '#ffd18a', '--accent': '#ffae00' },
+  msdos: { '--bg': '#1F1F1F', '--fg': '#C0C0C0', '--accent': '#FFFFFF' },
+  clu: { '--bg': '#001318', '--fg': '#9de7ff', '--accent': '#2ad1ff' },
+  skynet: { '--bg': '#0a0000', '--fg': '#ff4d4d', '--accent': '#ff0000' },
+  deepthought: { '--bg': '#0a0010', '--fg': '#e0b3ff', '--accent': '#aa33ff' },
 };
 
 const LABELS = {
@@ -17,7 +17,7 @@ const LABELS = {
   msdos: 'MS-DOS',
   clu: 'CLU',
   skynet: 'skynet',
-  deepthought: 'deep thought'
+  deepthought: 'deep thought',
 };
 
 /**
@@ -59,7 +59,7 @@ export function applyTheme(vibe) {
 
   const label =
     document.getElementById('vibeName') || // new
-    document.getElementById('themeName');  // legacy
+    document.getElementById('themeName'); // legacy
 
   if (label) {
     label.textContent = LABELS[key] || key;
@@ -119,9 +119,9 @@ export const themeNames = Object.keys(THEMES);
 export function initThemes() {
   const initial =
     window.app?.state?.vibe ??
-    window.app?.state?.theme ??   // legacy
+    window.app?.state?.theme ?? // legacy
     window.app?.cfg?.vibe ??
-    window.app?.cfg?.theme ??     // legacy
+    window.app?.cfg?.theme ?? // legacy
     'classic';
   setVibeInternal(initial);
 }

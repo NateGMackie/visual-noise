@@ -162,7 +162,9 @@ export const mining = (() => {
           ' '
         );
       const n = randInt(6, 14);
-      const msg = Array.from({ length: n }, () => choice(words)).join(' ').toUpperCase();
+      const msg = Array.from({ length: n }, () => choice(words))
+        .join(' ')
+        .toUpperCase();
       return `[${timeStamp()}] NOTE  ${msg}.`;
     } else {
       return `[${timeStamp()}] STAT  LAT=${randInt(2, 80)}ms  SHARDS=${randInt(

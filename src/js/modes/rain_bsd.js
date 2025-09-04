@@ -82,11 +82,14 @@ export const rain_bsd = (() => {
   // --- state ---------------------------------------------------------------
   let g, canvas;
   let dpr = 1;
-  let cols = 80, rows = 24;
-  let charW = 10, charH = 18;
+  let cols = 80,
+    rows = 24;
+  let charW = 10,
+    charH = 18;
 
   // palette (reads from CSS variables)
-  let fg = '#2aa3ff', bg = 'black';
+  let fg = '#2aa3ff',
+    bg = 'black';
 
   // Splash entries act like the original's xpos/ypos arrays (max ~5 at once)
   /** @type {{x:number,y:number,stage:number}[]} */
@@ -248,8 +251,10 @@ export const rain_bsd = (() => {
    */
   function randomInnerCell() {
     // Leave a 2-char margin so the big ring never clips
-    const left = 2, right = cols - 3;
-    const top = 2, bottom = rows - 3;
+    const left = 2,
+      right = cols - 3;
+    const top = 2,
+      bottom = rows - 3;
     return {
       x: rndInt(Math.random, left, Math.max(left, right)),
       y: rndInt(Math.random, top, Math.max(top, bottom)),

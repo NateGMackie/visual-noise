@@ -16,7 +16,7 @@ export const fireAscii = (() => {
   const SHADES = [' ', '.', ':', '-', '~', '*', '+', '=', '%', '#', '@'];
 
   // Coarse cell targets (CSS px per cell)
-  const SCALE_X = 7;  // ~chars per 7px horizontally
+  const SCALE_X = 7; // ~chars per 7px horizontally
   const SCALE_Y = 11; // ~chars per 11px vertically
 
   // --- Speed model (idx ∈ [1..12]; higher = hotter) ---
@@ -30,12 +30,12 @@ export const fireAscii = (() => {
      * @param {number} [idx] - Speed index; higher = hotter.
      * @returns {{emberChance:number, coolBase:number}} - New-ember probability and base cooling per step.
      */
-map(idx = 6) {
-  idx = Math.max(this.min, Math.min(this.max, idx));
-  const emberChance = 0.35 + (idx - 1) * (0.45 / (this.max - 1)); // ~0.35 → ~0.80
-  const coolBase    = 3.4  - (idx - 1) * (1.20 / (this.max - 1));  // ~3.4  → ~2.2
-  return { emberChance, coolBase };
-},
+    map(idx = 6) {
+      idx = Math.max(this.min, Math.min(this.max, idx));
+      const emberChance = 0.35 + (idx - 1) * (0.45 / (this.max - 1)); // ~0.35 → ~0.80
+      const coolBase = 3.4 - (idx - 1) * (1.2 / (this.max - 1)); // ~3.4  → ~2.2
+      return { emberChance, coolBase };
+    },
   };
 
   // CSS var helper
@@ -43,14 +43,15 @@ map(idx = 6) {
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
   // --- coarse grid state ---
-  let Wc = 0, Hc = 0;            // coarse grid width/height (in cells)
+  let Wc = 0,
+    Hc = 0; // coarse grid width/height (in cells)
   /** @type {Uint8Array|null} */
-  let heat = null;               // heat per cell 0..255
+  let heat = null; // heat per cell 0..255
   let running = false;
 
   // cached params (from speed model)
   let emberChance = 0.5;
-  let coolBase    = 3.0;
+  let coolBase = 3.0;
 
   /**
    * Rebuild coarse grid & buffers based on canvas size.
@@ -65,11 +66,11 @@ map(idx = 6) {
     heat = new Uint8Array(Wc * Hc);
   }
 
- /**
-  * Reset DPR-safe canvas defaults (no drawing).
-  * @param {*} ctx - Render context with {ctx2d,dpr}.
-  * @returns {void}
-  */
+  /**
+   * Reset DPR-safe canvas defaults (no drawing).
+   * @param {*} ctx - Render context with {ctx2d,dpr}.
+   * @returns {void}
+   */
   function resetCanvasState(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -100,9 +101,13 @@ map(idx = 6) {
   }
 
   /** Start simulation. @returns {void} */
-  function start() { running = true; }
+  function start() {
+    running = true;
+  }
   /** Stop simulation.  @returns {void} */
-  function stop()  { running = false; }
+  function stop() {
+    running = false;
+  }
 
   /**
    * Clear heat field and canvas.
@@ -132,7 +137,7 @@ map(idx = 6) {
     else if (s && typeof s === 'object') idx = s.index ?? s.idx ?? s.value ?? 6;
     const p = speedModel.map(idx);
     emberChance = p.emberChance;
-    coolBase    = p.coolBase;
+    coolBase = p.coolBase;
   }
 
   /**
@@ -160,13 +165,13 @@ map(idx = 6) {
       for (let y = 0; y < Hc - 1; y++) {
         const liftHere = 0.3 + 0.2 * (1 - y / (Hc - 1)); // 0.50 → 0.30
         for (let x = 0; x < Wc; x++) {
-          const rx  = (x + (((Math.random() * 3) | 0) - 1) + Wc) % Wc;
+          const rx = (x + (((Math.random() * 3) | 0) - 1) + Wc) % Wc;
           const hop = Math.random() < liftHere && y + 2 < Hc ? 2 : 1;
           const below = heat[(y + hop) * Wc + rx];
 
           const coolJitter = (Math.random() * 2) | 0; // 0..1
-          const coolTaper  = 0.95 - 0.05 * (y / (Hc - 1)); // 0.95 → 0.90
-          const cool       = Math.max(1, (coolBase - 0.4 + coolJitter) * coolTaper);
+          const coolTaper = 0.95 - 0.05 * (y / (Hc - 1)); // 0.95 → 0.90
+          const cool = Math.max(1, (coolBase - 0.4 + coolJitter) * coolTaper);
 
           const i = y * Wc + x;
           heat[i] = below > cool ? below - cool : 0;

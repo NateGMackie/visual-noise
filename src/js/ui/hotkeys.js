@@ -14,12 +14,12 @@
  * @returns {void}
  */
 export function installHotkeys({
-  cycleFamily,     // (dir) => void    dir: -1 | +1
-  cycleFlavor,     // (dir) => void
-  selectModeNum,   // (n)  => void    n: 1..10  (0 maps to 10)
-  cycleTheme,      // (dir) => void
-  toggleControls,  // ()   => void
-  setHudHelp,      // (html) => void  optional; updates help/hints if provided
+  cycleFamily, // (dir) => void    dir: -1 | +1
+  cycleFlavor, // (dir) => void
+  selectModeNum, // (n)  => void    n: 1..10  (0 maps to 10)
+  cycleTheme, // (dir) => void
+  toggleControls, // ()   => void
+  setHudHelp, // (html) => void  optional; updates help/hints if provided
 }) {
   const helpHTML = `
     <div class="hud-help">
@@ -49,7 +49,7 @@ export function installHotkeys({
       if (isInputLike(document.activeElement)) return;
 
       // Normalize
-      const k = e.key;   // human-readable, respects OS layout (can be “Dead” on some layouts)
+      const k = e.key; // human-readable, respects OS layout (can be “Dead” on some layouts)
       const code = e.code; // physical key identifier (e.g., "BracketLeft", "Comma")
       const s = e.shiftKey;
 

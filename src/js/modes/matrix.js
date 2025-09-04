@@ -28,8 +28,11 @@ export const matrix = (() => {
   const GLOW_COLOR = '#03FFAF';
 
   // State
-  let cols = 0, rows = 0;
-  let cellW = 10, cellH = 16, fontSize = 14;
+  let cols = 0,
+    rows = 0;
+  let cellW = 10,
+    cellH = 16,
+    fontSize = 14;
   /** @type {Array<{y:number,speed:number,trail:number,charset:string}>} */
   let columns = []; // per-column stream state
   let running = false;
@@ -42,7 +45,12 @@ export const matrix = (() => {
   function hexToRgb(hex) {
     const h = hex.replace('#', '');
     const v = parseInt(
-      h.length === 3 ? h.split('').map((x) => x + x).join('') : h,
+      h.length === 3
+        ? h
+            .split('')
+            .map((x) => x + x)
+            .join('')
+        : h,
       16
     );
     return `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`;
@@ -71,9 +79,9 @@ export const matrix = (() => {
 
     // initialize / reinitialize columns
     columns = Array.from({ length: cols }, () => ({
-      y: Math.floor(-Math.random() * rows),          // start above the top
-      speed: 0.5 + Math.random() * 0.5,              // 0.5–1.0 cells/frame @ base speed
-      trail: 6 + Math.floor(Math.random() * 13),     // 6–18
+      y: Math.floor(-Math.random() * rows), // start above the top
+      speed: 0.5 + Math.random() * 0.5, // 0.5–1.0 cells/frame @ base speed
+      trail: 6 + Math.floor(Math.random() * 13), // 6–18
       charset: pickCharset(),
     }));
   }
@@ -103,9 +111,13 @@ export const matrix = (() => {
   }
 
   /** Start the animation. @returns {void} */
-  function start() { running = true; }
+  function start() {
+    running = true;
+  }
   /** Stop the animation. @returns {void} */
-  function stop() { running = false; }
+  function stop() {
+    running = false;
+  }
 
   /**
    * Clear canvas and reset column state.

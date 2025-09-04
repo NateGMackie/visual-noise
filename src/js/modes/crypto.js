@@ -14,13 +14,16 @@ import { randInt } from '../lib/index.js';
  */
 export const crypto = (() => {
   // ——— Internal state ———
-  let fontSize = 16, lineH = 18, cols = 80, rows = 40;
-  let buffer = [];           // recent lines
-  let maxLines = 200;        // ring buffer cap
-  let emitIntervalMs = 150;  // base cadence (scaled by main loop’s speed if desired)
+  let fontSize = 16,
+    lineH = 18,
+    cols = 80,
+    rows = 40;
+  let buffer = []; // recent lines
+  let maxLines = 200; // ring buffer cap
+  let emitIntervalMs = 150; // base cadence (scaled by main loop’s speed if desired)
   let cursorBlinkMs = 0;
   let running = false;
-  let emitAccumulator = 0;   // accumulates ctx.elapsed toward emitIntervalMs
+  let emitAccumulator = 0; // accumulates ctx.elapsed toward emitIntervalMs
 
   const spinner = ['|', '/', '-', '\\'];
   let spinIdx = 0;
@@ -29,11 +32,11 @@ export const crypto = (() => {
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
-/**
- * Return a hex string of length 2*n.
- * @param {number} n - Number of random bytes to generate.
- * @returns {string} Hex string (lowercase), 2 characters per byte.
- */
+  /**
+   * Return a hex string of length 2*n.
+   * @param {number} n - Number of random bytes to generate.
+   * @returns {string} Hex string (lowercase), 2 characters per byte.
+   */
   function randHex(n) {
     const bytes = new Uint8Array(n);
     globalThis.crypto.getRandomValues(bytes);
@@ -43,11 +46,11 @@ export const crypto = (() => {
   const shortHash = () => randHex(4) + '…' + randHex(2);
   const addr = () => 'bc1q' + randHex(10).slice(0, 10);
 
-/**
- * Push a line into the ring buffer.
- * @param {string} line - The log line to append.
- * @returns {void}
- */
+  /**
+   * Push a line into the ring buffer.
+   * @param {string} line - The log line to append.
+   * @returns {void}
+   */
   function push(line) {
     buffer.push(line);
     if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
@@ -88,11 +91,11 @@ export const crypto = (() => {
 
   // ——— Mode API ———
 
- /**
-  * Initialize DPR-safe canvas defaults and sizing.
-  * @param {*} ctx - Render context ({canvas, ctx2d, dpr, w, h, ...}).
-  * @returns {void}
-  */
+  /**
+   * Initialize DPR-safe canvas defaults and sizing.
+   * @param {*} ctx - Render context ({canvas, ctx2d, dpr, w, h, ...}).
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -111,25 +114,29 @@ export const crypto = (() => {
     emitAccumulator = 0;
   }
 
- /**
-  * Recompute metrics on geometry/DPR change.
-  * @param {*} ctx - Render context ({canvas, ctx2d, dpr, w, h, ...}).
-  * @returns {void}
-  */
+  /**
+   * Recompute metrics on geometry/DPR change.
+   * @param {*} ctx - Render context ({canvas, ctx2d, dpr, w, h, ...}).
+   * @returns {void}
+   */
   function resize(ctx) {
     init(ctx);
   }
 
   /** Start emission. @returns {void} */
-  function start() { running = true; }
+  function start() {
+    running = true;
+  }
   /** Stop emission.  @returns {void} */
-  function stop() { running = false; }
+  function stop() {
+    running = false;
+  }
 
-/**
- * Clear buffer and canvas.
- * @param {*} ctx - Render context with {ctx2d, w, h}.
- * @returns {void}
- */
+  /**
+   * Clear buffer and canvas.
+   * @param {*} ctx - Render context with {ctx2d, w, h}.
+   * @returns {void}
+   */
   function clear(ctx) {
     buffer = [];
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);

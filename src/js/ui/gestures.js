@@ -20,8 +20,11 @@ export function initGestures(root = document.body) {
   return () => detach(root);
 }
 
-let startX = 0, startY = 0, startT = 0;
-let movedX = 0, movedY = 0;
+let startX = 0,
+  startY = 0,
+  startT = 0;
+let movedX = 0,
+  movedY = 0;
 let tracking = false;
 
 /**
@@ -119,7 +122,8 @@ function onMove(e) {
   movedY = dy;
 
   const { MAX_OFF_AXIS } = thresholds();
-  const absX = Math.abs(dx), absY = Math.abs(dy);
+  const absX = Math.abs(dx),
+    absY = Math.abs(dy);
 
   // Avoid pull-to-refresh: don't block downward drags starting at the very top
   const atTop =
@@ -153,10 +157,13 @@ function onEnd() {
   const { MIN_DIST, MAX_OFF_AXIS, MAX_TIME } = thresholds();
   const dx = movedX;
   const dy = movedY;
-  const absX = Math.abs(dx), absY = Math.abs(dy);
+  const absX = Math.abs(dx),
+    absY = Math.abs(dy);
 
   // Bottom-edge tap opens controls/nav
-  const TAP_TIME = 300, TAP_MOVE = 10, EDGE_PX = 24;
+  const TAP_TIME = 300,
+    TAP_MOVE = 10,
+    EDGE_PX = 24;
   const H = window.innerHeight || document.documentElement.clientHeight || 0;
   const isTap = dt <= TAP_TIME && absX < TAP_MOVE && absY < TAP_MOVE;
   if (isTap && H && startY >= H - EDGE_PX) {

@@ -16,8 +16,13 @@ export const drizzle = (() => {
   const info = { family: 'rain', flavor: 'drizzle' };
 
   // state
-  let cols = 0, rows = 0, fontSize = 16, lineH = 18;
-  let drops = [], tickAcc = 0, tickMs = 80;
+  let cols = 0,
+    rows = 0,
+    fontSize = 16,
+    lineH = 18;
+  let drops = [],
+    tickAcc = 0,
+    tickMs = 80;
   let running = false;
 
   /**
@@ -58,9 +63,13 @@ export const drizzle = (() => {
   }
 
   /** Start animation. @returns {void} */
-  function start() { running = true; }
+  function start() {
+    running = true;
+  }
   /** Stop animation.  @returns {void} */
-  function stop()  { running = false; }
+  function stop() {
+    running = false;
+  }
 
   /**
    * Clear canvas & reset drops.

@@ -19,8 +19,8 @@ export const sysadmin = (() => {
   let maxLines = 200;
 
   let running = false;
-  let emitAccumulator = 0;   // ms since last line emission
-  let emitIntervalMs = 140;  // cadence in stream mode
+  let emitAccumulator = 0; // ms since last line emission
+  let emitIntervalMs = 140; // cadence in stream mode
 
   // palette (reads from CSS variables)
   const readVar = (name, fallback) =>
@@ -60,24 +60,24 @@ export const sysadmin = (() => {
    */
   function makeLine() {
     const r = Math.random();
-    if (r < 0.20) {
+    if (r < 0.2) {
       // CPU
       const core = randInt(0, 7);
       const pct = randInt(1, 99);
       return `[${timeStamp()}] CPU${core}  ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
     }
-    if (r < 0.40) {
+    if (r < 0.4) {
       // MEM
       const pct = randInt(10, 97);
       return `[${timeStamp()}] MEM    ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
     }
-    if (r < 0.60) {
+    if (r < 0.6) {
       // DISK
       const d = ['sda', 'sdb', 'nvme0n1'][randInt(0, 2)];
       const pct = randInt(5, 98);
       return `[${timeStamp()}] DISK   ${d}  ${String(pct).padStart(3, ' ')}%  [${makeBar(pct)}]`;
     }
-    if (r < 0.80) {
+    if (r < 0.8) {
       // NET
       const ifc = ['eth0', 'wlan0', 'lo'][randInt(0, 2)];
       const up = (randInt(1, 950) / 10).toFixed(1);
