@@ -4,13 +4,12 @@
 import { crypto } from './crypto.js';
 import { sysadmin } from './sysadmin.js';
 import { mining } from './mining.js';
-import { matrix } from './matrix.js';  
+import { matrix } from './matrix.js';
 import { digitalrain } from './digitalrain.js';
 import { rain_bsd } from './rain_bsd.js';
 import { drizzle } from './drizzle.js';
 import { fire } from './fire.js';
 import { fireAscii } from './fire_ascii.js';
-
 
 // Map keys directly to the mode objects
 export const registry = {

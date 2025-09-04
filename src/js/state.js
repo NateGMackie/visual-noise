@@ -6,22 +6,46 @@ import { registry as modeRegistry } from './modes/index.js';
 // Legacy-compatible config
 // -------------------------
 export const cfg = {
-  persona: 'crypto',   // legacy "current mode" name (still honored)
+  persona: 'crypto', // legacy "current mode" name (still honored)
   theme: 'classic',
   dock: 'bottom',
-  speed: 0.7,            // 1x default render speed
-  paused: false,       // running by default
+  speed: 0.7, // 1x default render speed
+  paused: false, // running by default
 };
 
 // Simple event bus (unchanged)
 const listeners = new Map(); // event -> Set<fn>
-export function on(evt, fn){
-  if(!listeners.has(evt)) listeners.set(evt, new Set());
+
+/**
+ * Subscribe a handler to an event name.
+ * @param {string} evt - Event name (e.g., "mode", "flavor", "theme", "speed").
+ * @param {(data:any)=>void} fn - Handler invoked with event payload.
+ * @returns {void}
+ */
+export function on(evt, fn) {
+  if (!listeners.has(evt)) listeners.set(evt, new Set());
   listeners.get(evt).add(fn);
 }
-export function off(evt, fn){ listeners.get(evt)?.delete(fn); }
-export function emit(evt, data){ listeners.get(evt)?.forEach(fn => fn(data)); }
 
+/**
+ * Unsubscribe a handler from an event name.
+ * @param {string} evt - Event name previously used with {@link on}.
+ * @param {(data:any)=>void} fn - Handler to remove.
+ * @returns {void}
+ */
+export function off(evt, fn) {
+  listeners.get(evt)?.delete(fn);
+}
+
+/**
+ * Emit an event to all subscribers.
+ * @param {string} evt - Event name to emit.
+ * @param {any} [data] - Optional payload for subscribers.
+ * @returns {void}
+ */
+export function emit(evt, data) {
+  listeners.get(evt)?.forEach((fn) => fn(data));
+}
 
 // -------------------------
 // NEW: Single Source of Truth
@@ -38,7 +62,7 @@ export const registry = {
           name: 'crypto',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
           },
           impl: 'crypto',
         },
@@ -46,7 +70,7 @@ export const registry = {
           name: 'sysadmin',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
           },
           impl: 'sysadmin',
         },
@@ -61,7 +85,7 @@ export const registry = {
           name: 'mining',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
           },
           impl: 'mining',
         },
@@ -76,7 +100,7 @@ export const registry = {
           name: 'matrix',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'matrix',
         },
@@ -84,7 +108,7 @@ export const registry = {
           name: 'BSD',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'rain_bsd',
         },
@@ -92,7 +116,7 @@ export const registry = {
           name: 'digital rain',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'digitalrain',
         },
@@ -100,7 +124,7 @@ export const registry = {
           name: 'drizzle',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 }
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'drizzle',
         },
@@ -115,7 +139,7 @@ export const registry = {
           name: 'fire',
           flavorsOrder: ['classic'],
           flavors: {
-            classic:   { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'fire',
         },
@@ -123,7 +147,7 @@ export const registry = {
           name: 'fireAscii',
           flavorsOrder: ['classic'],
           flavors: {
-            classic:   { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
+            classic: { name: 'classic', defaultSpeed: 6, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'fireAscii',
         },
@@ -142,8 +166,21 @@ export const active = {
 };
 
 // Helpers that consumers (UI/hotkeys) can use
-export function fullId(a = active) { return `${a.familyId}.${a.modeId}.${a.flavorId}`; }
 
+/**
+ * Return a stable path string for the active selection.
+ * @param {{familyId:string,modeId:string,flavorId:string}} [a] - Selection to stringify.
+ * @returns {string} Dotted triple, e.g. "system.crypto.classic".
+ */
+export function fullId(a = active) {
+  return `${a.familyId}.${a.modeId}.${a.flavorId}`;
+}
+
+/**
+ * Resolve the registry nodes for a given selection path.
+ * @param {{familyId:string,modeId:string,flavorId:string}} [path] - Selection path to resolve.
+ * @returns {{fam?:any, mode?:any, flav?:any}} Family, mode, and flavor objects if found.
+ */
 export function getNode(path = active) {
   const fam = registry.families[path.familyId];
   const mode = fam?.modes?.[path.modeId];
@@ -151,32 +188,63 @@ export function getNode(path = active) {
   return { fam, mode, flav };
 }
 
+/**
+ * Initialize missing values (e.g., speed from flavor defaults).
+ * @returns {void}
+ */
 export function initDefaults() {
   const { flav } = getNode();
   if (active.speed == null && flav) active.speed = flav.defaultSpeed ?? 5;
 }
 
 // Move pointers while staying valid
+
+/**
+ * Select a family and reset mode/flavor to that family's defaults.
+ * @param {string} nextFamilyId - Family key present in {@link registry.families}.
+ * @returns {void}
+ */
 export function setFamily(nextFamilyId) {
-  const fam = registry.families[nextFamilyId]; if (!fam) return;
+  const fam = registry.families[nextFamilyId];
+  if (!fam) return;
   active.familyId = nextFamilyId;
   active.modeId = fam.modesOrder[0];
   active.flavorId = fam.modes[active.modeId].flavorsOrder[0];
   initDefaults();
 }
+
+/**
+ * Select a mode within the current family and reset its flavor default.
+ * @param {string} nextModeId - Mode key present in the current family's modes.
+ * @returns {void}
+ */
 export function setModeInActiveFamily(nextModeId) {
-  const fam = registry.families[active.familyId]; if (!fam?.modes[nextModeId]) return;
+  const fam = registry.families[active.familyId];
+  if (!fam?.modes[nextModeId]) return;
   active.modeId = nextModeId;
   active.flavorId = fam.modes[nextModeId].flavorsOrder[0];
   initDefaults();
 }
+
+/**
+ * Select a flavor (style) for the current mode.
+ * Emits "flavor" after updating.
+ * @param {string} nextFlavorId - Flavor key present in the current mode.
+ * @returns {void}
+ */
 export function setFlavor(nextFlavorId) {
-  const { mode } = getNode(); if (!mode?.flavors[nextFlavorId]) return;
+  const { mode } = getNode();
+  if (!mode?.flavors[nextFlavorId]) return;
   active.flavorId = nextFlavorId;
   initDefaults();
   emit('flavor', { modeId: active.modeId, flavorId: active.flavorId });
 }
 
+/**
+ * Step to the next/previous mode in the current family.
+ * @param {number} delta - Positive to go forward, negative to go backward.
+ * @returns {void}
+ */
 export function stepMode(delta) {
   const fam = registry.families[active.familyId];
   const list = fam.modesOrder;
@@ -184,6 +252,12 @@ export function stepMode(delta) {
   const j = (i + delta + list.length) % list.length;
   setModeInActiveFamily(list[j]);
 }
+
+/**
+ * Step to the next/previous flavor in the current mode.
+ * @param {number} delta - Positive to go forward, negative to go backward.
+ * @returns {void}
+ */
 export function stepFlavor(delta) {
   const { mode } = getNode();
   const list = mode.flavorsOrder;
@@ -192,12 +266,23 @@ export function stepFlavor(delta) {
   setFlavor(list[j]);
 }
 
+/**
+ * Jump to a specific mode by 1-based index within the current family.
+ * @param {number} idx1based - 1-based index into the family's modesOrder.
+ * @returns {void}
+ */
 export function jumpModeByIndex(idx1based) {
   const fam = registry.families[active.familyId];
   const list = fam.modesOrder;
   const i = Math.min(Math.max(1, idx1based), list.length) - 1;
   setModeInActiveFamily(list[i]);
 }
+
+/**
+ * Jump to a specific flavor by 1-based index within the current mode.
+ * @param {number} idx1based - 1-based index into the mode's flavorsOrder.
+ * @returns {void}
+ */
 export function jumpFlavorByIndex(idx1based) {
   const { mode } = getNode();
   const list = mode.flavorsOrder;
@@ -205,22 +290,44 @@ export function jumpFlavorByIndex(idx1based) {
   setFlavor(list[i]);
 }
 
+/**
+ * Return the current speed bounds for the active flavor.
+ * @returns {{min:number,max:number,step:number}} Bounds and step size.
+ */
 export function speedBounds() {
   const { flav } = getNode();
   return { min: flav?.minSpeed ?? 1, max: flav?.maxSpeed ?? 9, step: flav?.step ?? 1 };
 }
+
+/**
+ * Set the current speed, clamped to the active flavor's bounds.
+ * Emits "speed" and mirrors the value to legacy {@link cfg.speed}.
+ * @param {number} next - Target speed value.
+ * @returns {void}
+ */
 export function setSpeed(next) {
   const { min, max } = speedBounds();
   active.speed = Math.max(min, Math.min(max, next));
   cfg.speed = active.speed; // keep legacy field coherent
   emit('speed', cfg.speed);
 }
+
+/**
+ * Increment/decrement speed by one step multiple.
+ * @param {number} delta - Positive to increase, negative to decrease.
+ * @returns {void}
+ */
 export function stepSpeed(delta) {
   const { step } = speedBounds();
   setSpeed((active.speed ?? 5) + Math.sign(delta) * step);
 }
 
 // For UI labels
+
+/**
+ * Human-friendly labels for the active selection.
+ * @returns {{family:string,mode:string,flavor:string}} Labels suitable for UI.
+ */
 export function labels() {
   const { fam, mode, flav } = getNode();
   return {
@@ -233,7 +340,14 @@ export function labels() {
 // -------------------------
 // Legacy API kept intact
 // -------------------------
-export function setMode(modeName){
+
+/**
+ * Set the active mode by legacy "persona" name and emit "mode".
+ * Also updates the structured selection pointers.
+ * @param {string} modeName - Mode key (e.g., "crypto", "sysadmin").
+ * @returns {void}
+ */
+export function setMode(modeName) {
   // Update legacy field and emit as before
   cfg.persona = modeName;
 
@@ -253,31 +367,41 @@ export function setMode(modeName){
   emit('mode', modeName);
 }
 
-export function setTheme(theme){ 
-  cfg.theme = theme; 
+/**
+ * Set the current theme (vibe) by name and emit "theme".
+ * @param {string} theme - Theme key (e.g., "classic", "clu").
+ * @returns {void}
+ */
+export function setTheme(theme) {
+  cfg.theme = theme;
   active.themeId = theme;
-  emit('theme', theme); 
+  emit('theme', theme);
 }
 
 // --- taxonomy: map mode keys -> { family, typeLabel } ---
 export const taxonomy = {
   // system
-  crypto:      { family: 'system',    typeLabel: 'crypto' },
-  sysadmin:    { family: 'system',    typeLabel: 'sysadmin' },
+  crypto: { family: 'system', typeLabel: 'crypto' },
+  sysadmin: { family: 'system', typeLabel: 'sysadmin' },
   // developer
-  mining:      { family: 'developer', typeLabel: 'mining' },
+  mining: { family: 'developer', typeLabel: 'mining' },
   // rain
-  matrix:      { family: 'rain',      typeLabel: 'matrix' },
-  bsd:         { family: 'rain',      typeLabel: 'bsd' },          // <-- add this
-  rain_bsd:    { family: 'rain',      typeLabel: 'bsd' },
-  digitalrain: { family: 'rain',      typeLabel: 'digital rain' },
-  drizzle:     { family: 'rain',      typeLabel: 'drizzle' },
+  matrix: { family: 'rain', typeLabel: 'matrix' },
+  bsd: { family: 'rain', typeLabel: 'bsd' },
+  rain_bsd: { family: 'rain', typeLabel: 'bsd' },
+  digitalrain: { family: 'rain', typeLabel: 'digital rain' },
+  drizzle: { family: 'rain', typeLabel: 'drizzle' },
   // fire
-  fire:        { family: 'fire',      typeLabel: 'fire' },
-  fireAscii:   { family: 'fire',      typeLabel: 'fireAscii' },
+  fire: { family: 'fire', typeLabel: 'fire' },
+  fireAscii: { family: 'fire', typeLabel: 'fireAscii' },
 };
 
-export function labelsForMode(id){
+/**
+ * Compute labels for a given mode id (fallbacks to static taxonomy).
+ * @param {string} id - Mode key to label.
+ * @returns {{familyLabel:string,typeLabel:string}} UI labels.
+ */
+export function labelsForMode(id) {
   const mod = modeRegistry?.[id];
   if (mod && mod.info) {
     const familyLabel = mod.info.family || id;
@@ -289,13 +413,47 @@ export function labelsForMode(id){
   return { familyLabel: t.family, typeLabel: t.typeLabel };
 }
 
-// state.js — append near labelsForMode export
+/**
+ * Genre/style labels wrapper for newer terminology.
+ * @param {string} name - Mode key to label.
+ * @returns {{genreLabel:string,styleLabel:string}} Genre and style labels.
+ */
 export function labelsForGenreStyle(name) {
   const { familyLabel, typeLabel } = labelsForMode(name);
   return { genreLabel: familyLabel, styleLabel: typeLabel };
 }
 
-export function incSpeed(f = 1.2){ setSpeed((active.speed ?? cfg.speed) * f); }
-export function decSpeed(f = 1/1.2){ setSpeed((active.speed ?? cfg.speed) * f); }
-export function togglePause(){ cfg.paused = !cfg.paused; emit('paused', cfg.paused); }
-export function clearAll(){ emit('clear'); }
+/**
+ * Multiply current speed by a factor (e.g., 1.2 to speed up ~20%).
+ * @param {number} [f] - Factor to multiply speed by.
+ * @returns {void}
+ */
+export function incSpeed(f = 1.2) {
+  setSpeed((active.speed ?? cfg.speed) * f);
+}
+
+/**
+ * Divide current speed by a factor (e.g., 1.2 to slow down ~17%).
+ * @param {number} [f] - Factor to divide speed by.
+ * @returns {void}
+ */
+export function decSpeed(f = 1 / 1.2) {
+  setSpeed((active.speed ?? cfg.speed) * f);
+}
+
+/**
+ * Toggle the paused state and emit "paused".
+ * @returns {void}
+ */
+export function togglePause() {
+  cfg.paused = !cfg.paused;
+  emit('paused', cfg.paused);
+}
+
+/**
+ * Emit a "clear" event for consumers to wipe their state/canvas.
+ * @returns {void}
+ */
+export function clearAll() {
+  emit('clear');
+}

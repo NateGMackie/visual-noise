@@ -1,30 +1,119 @@
+/* eslint-env browser */
 // src/js/main.js
 
-// 1) Load the terminology shim first (static import is fine)
-import { installTerminologyAliases } from './compat/terminology_shim.js';
+// Canvas + utils (centralized DPR, resize, clear, typography)
+import {
+  attachHiDPICanvas,
+  resizeToDisplaySize,
+  clearCanvas,
+  modular,
+  applyMono,
+} from './lib/index.js';
 
-// 2) Create the app container and install the aliases BEFORE anything else touches state/events
+// App container on window (match your existing pattern)
 const app = window.app || { state: {}, ui: {}, events: window.events };
-window.app = app;   
-installTerminologyAliases(app);
+window.app = app;
 
+// Keep a single render context object passed into modes.
+// (Use generic types here to avoid jsdoc/no-undefined-types on DOM classes.)
+/** @type {{canvas: any, ctx2d: any, dpr:number, w:number, h:number, now:number, elapsed:number, dt:number, speed:number, paused:boolean, needsFullClear:boolean}} */
+const ctx = {
+  canvas: null,
+  ctx2d: null,
 
-// 3) Dynamically import everything else AFTER the shim is installed
+  dpr: 1,
+  w: 0,
+  h: 0,
+
+  now: 0,
+  elapsed: 0,
+  dt: 0,
+
+  speed: 1,
+  paused: false,
+
+  // request a full clear on next frame (e.g., after mode switch / orientation change)
+  needsFullClear: false,
+};
+
+// Active mode orchestration
+let activeModule = null;
+let loopId = 0;
+let lastT = performance.now();
+
+// --- Canvas helpers wired to lib --- //
+
+/**
+ * Ensure backing store and transform match the element’s CSS size.
+ * Updates ctx.dpr / ctx.w / ctx.h and reapplies DPR transform.
+ */
+function fit() {
+  if (!ctx.canvas || !ctx.ctx2d) return;
+
+  // If CSS size changed, lib will resize backing store and reapply DPR transform
+  const resized = resizeToDisplaySize(ctx.canvas, ctx.ctx2d);
+
+  // Read back the current DPR we apply (attach/resize ensure transform = (dpr, 0, 0, dpr, 0, 0))
+  const dprGuess = window.devicePixelRatio || 1;
+
+  ctx.dpr = Math.max(1, Math.min(dprGuess, 2));
+  ctx.w = ctx.canvas.width;  // device-pixel width
+  ctx.h = ctx.canvas.height; // device-pixel height
+
+  if (resized) {
+    // Let the active mode react to size changes
+    activeModule?.resize?.(ctx);
+  }
+}
+
+/** Full-surface clear, transform-safe. */
+function hardClear() {
+  if (!ctx.canvas || !ctx.ctx2d) return;
+  clearCanvas(ctx.canvas, ctx.ctx2d);
+}
+
+/** Make a resize/orientation feel like a mode switch: fresh size, fresh clear. */
+function refreshLikeModeChange() {
+  fit();
+  ctx.needsFullClear = true;
+}
+
+// --- Main animation loop --- //
+/**
+ * Per-frame render loop.
+ * @param {number} t - DOMHighResTimeStamp from window.requestAnimationFrame.
+ */
+function run(t) {
+  const raw = t - lastT;
+  lastT = t;
+
+  // clamp/apply speed (keeping your previous guardrails)
+  const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
+  ctx.elapsed = ctx.paused ? 0 : Math.min(raw * s, 100);
+  ctx.dt = ctx.elapsed / 1000;
+  ctx.now = t;
+
+  // Defensive: enforce DPR transform each frame in case a mode changed it
+  if (ctx.ctx2d) ctx.ctx2d.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+
+  if (ctx.needsFullClear) {
+    hardClear();
+    ctx.needsFullClear = false;
+  }
+
+  activeModule?.frame?.(ctx);
+  loopId = window.requestAnimationFrame(run);
+}
+
+// --- Dynamic imports --- //
 (async () => {
-  const [
-    stateMod,
-    themesMod,
-    modesMod,
-    uiMod,
-    gesturesMod,
-    notifyMod
-  ] = await Promise.all([
+  const [stateMod, themesMod, modesMod, uiMod, gesturesMod, notifyMod] = await Promise.all([
     import('./state.js'),
     import('./themes.js'),
     import('./modes/index.js'),
     import('./ui/ui.js'),
     import('./ui/gestures.js'),
-    import('./ui/notify.js')
+    import('./ui/notify.js'),
   ]);
 
   const { cfg, on, labelsForMode, labelsForGenreStyle } = stateMod;
@@ -39,201 +128,155 @@ installTerminologyAliases(app);
 
   // ---------- Canvas / 2D context ----------
   const canvas = document.getElementById('canvas');
-  const g = canvas.getContext('2d', { alpha: false });
-
-  // ---------- Render context passed to modes ----------
-  const ctx = {
-    canvas,
-    ctx2d: g,
-    dpr: 1,
-    w: 0, h: 0,
-    now: 0, elapsed: 0, dt: 0,
-    speed: cfg.speed,
-    paused: cfg.paused,
-    needsFullClear: false,
-  };
-
-  // Track last measured viewport/DPR
-  let lastSize = { w: 0, h: 0, dpr: 0 };
-
-  // ---------- Active mode orchestration ----------
-  let activeModule = null;
-  let loopId = 0;
-  let lastT = performance.now();
-  let stopGestures = null;
-
-  // ---------- Utilities ----------
-  function hardClear(ctx){
-    // Clear the full device-pixel surface regardless of current transform
-    g.save();
-    g.setTransform(1,0,0,1,0,0);
-    g.clearRect(0, 0, ctx.w, ctx.h);
-    g.restore();
+  if (!canvas) {
+    console.error('[visual-noise] #canvas not found');
+    return;
   }
 
-  function refreshLikeModeChange(){
-    // Make resizes/rotations visually identical to a mode switch
-    fit({ force: true, fullClear: true });
-    ctx.needsFullClear = true;
-  }
+  // Attach DPR-aware backing store & transform once at startup
+  const { ctx: g, dpr } = attachHiDPICanvas(canvas);
+  ctx.canvas = canvas;
+  ctx.ctx2d = g;
+  ctx.dpr = dpr;
 
-  // Keep DPR scale active every frame (bulletproof against modes that only set it in init())
-  function run(t){
-    const raw = t - lastT;
-    lastT = t;
+  // Optional, unified text baseline for any modes that draw text without setting fonts
+  applyMono(g, modular(0));
 
-    // clamp/apply speed
-    const s = Math.max(0.25, Math.min(4, ctx.speed || 1));
-    ctx.elapsed = ctx.paused ? 0 : Math.min(raw * s, 100);
-    ctx.dt = ctx.elapsed / 1000;
-    ctx.now = t;
+  // Initialize width/height from backing store
+  ctx.w = canvas.width;
+  ctx.h = canvas.height;
 
-    // Always render in CSS pixels → apply current DPR transform each frame
-    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-
-    if (ctx.needsFullClear){
-      hardClear(ctx);
-      ctx.needsFullClear = false;
-    }
-
-    activeModule?.frame?.(ctx);
-    loopId = requestAnimationFrame(run);
-  }
-
-  // Size canvas backing store to viewport; do NOT set transform here
-  function fit({ force = false, fullClear = false } = {}){
-    // Viewport CSS pixels
-    const w = Math.max(1, Math.round(window.innerWidth  || 1));
-    const h = Math.max(1, Math.round(window.innerHeight || 1));
-
-    // Reasonable DPR cap
-    const dpr = Math.min(Math.max(1, window.devicePixelRatio || 1), 2);
-
-    if (!force && w === lastSize.w && h === lastSize.h && dpr === lastSize.dpr) return;
-    lastSize = { w, h, dpr };
-
-    // Device-pixel surface
-    const devW = Math.max(1, Math.floor(w * dpr));
-    const devH = Math.max(1, Math.floor(h * dpr));
-
-    ctx.dpr = dpr;
-    ctx.w = devW;
-    ctx.h = devH;
-
-    if (canvas.width !== devW)  canvas.width  = devW;
-    if (canvas.height !== devH) canvas.height = devH;
-
-    if (fullClear) hardClear(ctx);
-
-    // Let mode react to size change
-    activeModule?.resize?.(ctx);
-  }
-
-  // Mode bootstrapper
-  function startModeByName(modeName){
-    if (loopId) cancelAnimationFrame(loopId);
+  // ---------- Active mode bootstrap ----------
+  /**
+   * Start a mode by registry name; falls back to crypto if missing.
+   * @param {string} modeName - Registry key of the mode to start.
+   */
+  function startModeByName(modeName) {
+    if (loopId) window.cancelAnimationFrame(loopId);
     activeModule?.stop?.(ctx);
 
-    // Sizing + visual hygiene first
     refreshLikeModeChange();
-
     activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
-    // Footer labels
-// Footer labels
-let genreLabel, styleLabel;
-if (typeof labelsForGenreStyle === 'function') {
-  const out = labelsForGenreStyle(modeName);
-  genreLabel = out.genreLabel;
-  styleLabel = out.styleLabel;
-} else {
-  const { familyLabel, typeLabel } = labelsForMode(modeName);
-  genreLabel = familyLabel;
-  styleLabel = typeLabel;
-}
+    // Footer labels — maintain both new (genre/style/vibe) and legacy (mode/type/theme) IDs
+    let genreLabel, styleLabel;
+    if (typeof labelsForGenreStyle === 'function') {
+      const out = labelsForGenreStyle(modeName);
+      genreLabel = out.genreLabel;
+      styleLabel = out.styleLabel;
+    } else {
+      const { familyLabel, typeLabel } = labelsForMode(modeName);
+      genreLabel = familyLabel;
+      styleLabel = typeLabel;
+    }
 
-// Prefer new IDs; fall back to old ones for one release
-const genreEl = document.getElementById('genreName') || document.getElementById('modeName');
-const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
-if (genreEl) genreEl.textContent = genreLabel;
-if (styleEl) styleEl.textContent = styleLabel;
-// (Remove any line that sets vibeEl from an undefined vibeLabel)
-
-
+    const genreEl = document.getElementById('genreName') || document.getElementById('modeName');
+    const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
+    if (genreEl) genreEl.textContent = genreLabel;
+    if (styleEl) styleEl.textContent = styleLabel;
 
     activeModule?.init?.(ctx);
     activeModule?.start?.(ctx);
 
     lastT = performance.now();
-    loopId = requestAnimationFrame(run);
+    loopId = window.requestAnimationFrame(run);
   }
 
-  // ---------- Init UI / gestures / themes ----------
+  // ---------- UI / gestures / themes ----------
   initThemes();
+  // Apply initial vibe label (initThemes already applies CSS vars via events)
+  const initialVibe = cfg?.vibe ?? cfg?.theme ?? 'classic';
+  const vibeEl0 = document.getElementById('vibeName') || document.getElementById('themeName');
+  if (vibeEl0) vibeEl0.textContent = initialVibe;
+
   initUI();
-  stopGestures = initGestures?.();
+  // Fire up gestures; we don't use the disposer yet.
+  initGestures?.();
 
   // ---------- Window & document events ----------
   // Throttled resize
   let resizeRaf = 0;
-  window.addEventListener('resize', () => {
-    if (resizeRaf) return;
-    resizeRaf = requestAnimationFrame(() => {
-      resizeRaf = 0;
-      refreshLikeModeChange();
-    });
-  }, { passive: true });
+  window.addEventListener(
+    'resize',
+    () => {
+      if (resizeRaf) return;
+      resizeRaf = window.requestAnimationFrame(() => {
+        resizeRaf = 0;
+        refreshLikeModeChange();
+      });
+    },
+    { passive: true }
+  );
 
   // Orientation change
-  window.addEventListener('orientationchange', () => {
-    setTimeout(refreshLikeModeChange, 150);
-  }, { passive: true });
+  window.addEventListener(
+    'orientationchange',
+    () => {
+      window.setTimeout(refreshLikeModeChange, 150);
+    },
+    { passive: true }
+  );
 
   // Fullscreen changes can alter viewport size
   document.addEventListener('fullscreenchange', () => {
-    setTimeout(refreshLikeModeChange, 50);
+    window.setTimeout(refreshLikeModeChange, 50);
   });
 
-  // ---------- Bus wiring ----------
-// ---------- Bus wiring ----------
-function handleStyleOrFlavor(id) {
-  if (!activeModule) return;
-  if (activeModule.setFlavor) {
-    activeModule.setFlavor(ctx, id);
-  } else {
-    activeModule.stop?.(ctx);
-    activeModule.init?.(ctx);
-    activeModule.start?.(ctx);
+  // ---------- Bus wiring (new + legacy) ----------
+  /**
+   * Update the active mode's style (aka flavor), restarting if the mode lacks a setter.
+   * @param {string} id - Style identifier to apply.
+   */
+  function handleStyleOrFlavor(id) {
+    if (!activeModule) return;
+    if (activeModule.setFlavor) {
+      activeModule.setFlavor(ctx, id);
+    } else {
+      // Fallback: restart mode to reflect flavor change
+      activeModule.stop?.(ctx);
+      activeModule.init?.(ctx);
+      activeModule.start?.(ctx);
+    }
+    const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
+    if (styleEl) styleEl.textContent = id;
   }
-  const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
-  if (styleEl) styleEl.textContent = id;
-}
 
-function handleVibe(v) {
-  applyTheme(v);
-  const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
-  if (vibeEl) vibeEl.textContent = v;
-}
+  /**
+   * Apply a vibe (theme) and update the HUD label.
+   * @param {string} v - Vibe key to apply (e.g., 'classic').
+   */
+  function handleVibe(v) {
+    applyTheme(v);
+    const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
+    if (vibeEl) vibeEl.textContent = v;
+  }
 
-// Legacy + new events (both supported during migration)
-on('mode',   (name) => { startModeByName(name); });
-on('flavor', (id)   => { handleStyleOrFlavor(id); });
-on('theme',  (v)    => { handleVibe(v); });
+  // Legacy names
+  on('mode',   (name) => { startModeByName(name); });
+  on('flavor', (id)   => { handleStyleOrFlavor(id); });
+  on('theme',  (v)    => { handleVibe(v); });
 
-on('genre',  (name) => { startModeByName(name); });
-on('style',  (id)   => { handleStyleOrFlavor(id); });
-on('vibe',   (v)    => { handleVibe(v); });
+  // New names
+  on('genre',  (name) => { startModeByName(name); });
+  on('style',  (id)   => { handleStyleOrFlavor(id); });
+  on('vibe',   (v)    => { handleVibe(v); });
 
-on('speed',  (s) => { ctx.speed  = s; });
-on('paused', (p) => { ctx.paused = p; });
-on('clear',  () => { activeModule?.clear?.(ctx); });
+  on('speed',  (s) => { ctx.speed  = s; });
+  on('paused', (p) => { ctx.paused = p; });
+  on('clear',  () => { activeModule?.clear?.(ctx); });
 
   // ---------- Boot ----------
-  requestAnimationFrame(() => {
+  // Seed speed/paused from cfg (match your prior behavior)
+  ctx.speed = cfg.speed;
+  ctx.paused = cfg.paused;
+
+  window.requestAnimationFrame(() => {
     refreshLikeModeChange();
     startModeByName(cfg.persona);
 
-   const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
-   if (vibeEl && (cfg.vibe || cfg.theme)) vibeEl.textContent = (cfg.vibe || cfg.theme);
+    const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
+    if (vibeEl && (cfg.vibe || cfg.theme)) {
+      vibeEl.textContent = cfg.vibe || cfg.theme;
+    }
   });
 })();
