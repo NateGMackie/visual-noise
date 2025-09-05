@@ -37,6 +37,20 @@ export const fire = (() => {
   const TARGET_FPS = 30;
   const MAX_GLOW = 6;
 
+// --- Fire height step display ---
+const HEIGHT_STEPS_TOTAL = 10;   // ← change this if you want 12, 16, etc.
+function heightIndexFromBoost(boost, minBoost, maxBoost, total = HEIGHT_STEPS_TOTAL) {
+  const t = (boost - minBoost) / (maxBoost - minBoost);      // 0..1
+  const idx0 = Math.round(t * (total - 1));                  // 0..total-1
+  return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
+}
+function emitHeightStep() {
+  const index = heightIndexFromBoost(HEIGHT_BOOST, MIN_BOOST, MAX_BOOST);
+  const bus = (window.app && window.app.events) || window.events;
+  bus?.emit?.('fire.height.step', { index, total: HEIGHT_STEPS_TOTAL });
+}
+
+
   // Live-tuned
   let FUEL_ROWS_FRAC = 0.12;
   let HEIGHT_BOOST = 1.25;
@@ -98,24 +112,24 @@ export const fire = (() => {
 
   // Utils
 
-  // Hotkeys (hold Shift)
   /**
-   * Handle Shift+Arrow hotkeys to tweak flame height and fuel band.
+   * Hotkeys (hold Shift) — tweak height/fuel and emit indexed height step
    * @param {*} e - KeyboardEvent from window.
    * @returns {void}
    */
-
 function onKey(e) {
   if (!e.shiftKey) return;
   switch (e.key) {
     case 'ArrowUp': {
       HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
-      emit('fire.height', Number(HEIGHT_BOOST));
+      emit('fire.height', Number(HEIGHT_BOOST));     // keep numeric for internal use
+      emitHeightStep();                               // NEW: indexed toast payload
       break;
     }
     case 'ArrowDown': {
       HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
       emit('fire.height', Number(HEIGHT_BOOST));
+      emitHeightStep();
       break;
     }
     case 'ArrowRight': {
@@ -125,11 +139,12 @@ function onKey(e) {
     }
     case 'ArrowLeft': {
       FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
-      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100));
       break;
     }
   }
 }
+
 
 
   // ----- Geometry/state rebuild (no drawing) -----

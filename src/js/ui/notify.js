@@ -326,6 +326,25 @@ on('fire.height', (h) => {
   const val = (typeof h === 'number' && h.toFixed) ? h.toFixed(0) : String(h);
   notify(NOTIFY.fireHeight, `Height: ${val}`, { coalesce: true });
 });
+// Height (indexed steps, e.g., { index: 3, total: 10 })
+on('fire.height.step', (p) => {
+  // Accept either object or JSON/string payloads
+  let index, total;
+  if (p && typeof p === 'object') {
+    ({ index, total } = p);
+  } else {
+    try { ({ index, total } = JSON.parse(p)); } catch (_) { /* noop */ }
+  }
+  if (Number.isFinite(index) && Number.isFinite(total)) {
+    notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
+  }
+});
+
+// Fuel (unchanged; percent integer)
+on('fire.fuel', (f) => {
+  const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
+  notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
+});
 on('fire.fuel', (f) => {
   const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
   notify(NOTIFY.fireFuel, `Fuel: ${val}`, { coalesce: true });
