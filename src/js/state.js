@@ -2,6 +2,7 @@
 
 import { registry as modeRegistry } from './modes/index.js';
 
+
 // -------------------------
 // Legacy-compatible config
 // -------------------------
@@ -320,6 +321,19 @@ export function setSpeed(next) {
 export function stepSpeed(delta) {
   const { step } = speedBounds();
   setSpeed((active.speed ?? 5) + Math.sign(delta) * step);
+}
+
+// --- Fire controls (canonical emitters) ---
+/** Clamp & emit fire height (0..100 typical; adjust as needed). */
+export function setFireHeight(next) {
+  const h = Math.max(0, Math.min(100, Number(next)));
+  emit('fire.height', h);
+}
+
+/** Clamp & emit fire fuel (0..100 typical; adjust as needed). */
+export function setFireFuel(next) {
+  const f = Math.max(0, Math.min(100, Number(next)));
+  emit('fire.fuel', f);
 }
 
 // For UI labels

@@ -23,6 +23,8 @@ const NOTIFY = Object.freeze({
   speed: 'notify.speed',
   state: 'notify.state',
   power: 'notify.power',
+  fireHeight: 'notify.fire.height',
+  fireFuel:   'notify.fire.fuel',
   // Legacy aliases
   system: 'notify.genre',
   program: 'notify.style',
@@ -43,6 +45,8 @@ const DEFAULTS = {
 // Per-channel overrides (optional)
 const CHANNEL_OPTIONS = {
   [NOTIFY.speed]: { coalesce: true, durationMs: 1200 },
+  [NOTIFY.fireHeight]: { coalesce: true, durationMs: 900 },
+  [NOTIFY.fireFuel]:   { coalesce: true, durationMs: 900 },
   // Example: [NOTIFY.vibe]: { durationMs: 1800 },
 };
 
@@ -205,6 +209,8 @@ function titleForChannel(channel) {
     case NOTIFY.speed: return 'Speed';
     case NOTIFY.state: return 'State';
     case NOTIFY.power: return 'Power';
+    case NOTIFY.fireHeight: return 'Fire • Height';
+case NOTIFY.fireFuel:   return 'Fire • Fuel';
     default: return 'Notice';
   }
 }
@@ -315,7 +321,15 @@ function wireBus(on) {
     const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
     notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
   });
-
+// Fire controls (slide/gesture): mirror speed-style coalescing
+on('fire.height', (h) => {
+  const val = (typeof h === 'number' && h.toFixed) ? h.toFixed(0) : String(h);
+  notify(NOTIFY.fireHeight, `Height: ${val}`, { coalesce: true });
+});
+on('fire.fuel', (f) => {
+  const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
+  notify(NOTIFY.fireFuel, `Fuel: ${val}`, { coalesce: true });
+});
   // Paused/Resumed
   on('paused', (p) => notify(NOTIFY.state, p ? 'Paused' : 'Resumed'));
 

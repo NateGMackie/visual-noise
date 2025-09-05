@@ -93,22 +93,10 @@ export const fire = (() => {
   let lastT = 0,
     acc = 0;
 
-  // HUD
-  let hudText = '';
-  let hudUntil = 0;
-
   const dtTarget = 1000 / TARGET_FPS;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   // Utils
-
-  /**
-   *
-   */
-  function showHUD() {
-    hudText = `height:${HEIGHT_BOOST.toFixed(2)}  fuel:${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`;
-    hudUntil = nowMs() + 1500;
-  }
 
   // Hotkeys (hold Shift)
   /**
@@ -116,51 +104,33 @@ export const fire = (() => {
    * @param {*} e - KeyboardEvent from window.
    * @returns {void}
    */
-  function onKey(e) {
-    if (!e.shiftKey) return;
-    switch (e.key) {
-      case 'ArrowUp':
-        HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `height: ${HEIGHT_BOOST.toFixed(2)}`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowDown':
-        HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `height: ${HEIGHT_BOOST.toFixed(2)}`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowRight':
-        FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `fuel: ${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowLeft':
-        FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `fuel: ${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
+
+function onKey(e) {
+  if (!e.shiftKey) return;
+  switch (e.key) {
+    case 'ArrowUp': {
+      HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
+      emit('fire.height', Number(HEIGHT_BOOST));
+      break;
+    }
+    case 'ArrowDown': {
+      HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
+      emit('fire.height', Number(HEIGHT_BOOST));
+      break;
+    }
+    case 'ArrowRight': {
+      FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent
+      break;
+    }
+    case 'ArrowLeft': {
+      FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent
+      break;
     }
   }
+}
+
 
   // ----- Geometry/state rebuild (no drawing) -----
   /**
@@ -196,6 +166,19 @@ export const fire = (() => {
 
     rebuild(ctx);
     lastT = nowMs();
+
+    // React to external UI changes (sliders/gestures)
+  const bus = (window.app && window.app.events) || window.events;
+  if (bus?.on) {
+    bus.on('fire.height', (h) => {
+      HEIGHT_BOOST = clamp(Number(h) || HEIGHT_BOOST, MIN_BOOST, MAX_BOOST);
+    });
+    bus.on('fire.fuel', (p) => {
+      const frac = clamp((Number(p) || 0) / 100, MIN_FUEL, MAX_FUEL);
+      FUEL_ROWS_FRAC = frac;
+    });
+  }
+    window.addEventListener('keydown', onKey, { passive: true });
   }
 
   /**
@@ -223,6 +206,13 @@ export const fire = (() => {
   function stop() {
     running = false;
     window.removeEventListener('keydown', onKey);
+
+    window.removeEventListener('keydown', onKey, { passive: true });
+  const bus = (window.app && window.app.events) || window.events;
+  if (bus?.off) {
+    bus.off('fire.height', /* same ref as above */);
+    bus.off('fire.fuel',   /* same ref as above */);
+  }
   }
 
   /**
@@ -336,19 +326,6 @@ export const fire = (() => {
       g.shadowColor = 'transparent';
     }
 
-    // HUD overlay
-    if (now < hudUntil) {
-      g.globalAlpha = 0.9;
-      g.fillStyle = 'rgba(0,0,0,0.5)';
-      g.font = `12px ui-monospace, SFMono-Regular, Menlo, monospace`;
-      const pad = 6,
-        text = hudText,
-        tw = g.measureText(text).width;
-      g.fillRect(8, 8, tw + pad * 2, 20);
-      g.globalAlpha = 1;
-      g.fillStyle = '#fff';
-      g.fillText(text, 8 + pad, 10);
-    }
   }
 
   return { init, resize, start, stop, frame, clear };
