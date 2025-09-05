@@ -116,15 +116,20 @@ function run(t) {
     import('./ui/notify.js'),
   ]);
 
-  const { cfg, on, labelsForMode, labelsForGenreStyle } = stateMod;
+  const { cfg, on, off, emit, labelsForMode, labelsForGenreStyle } = stateMod;
   const { initThemes, applyTheme } = themesMod;
   const { registry: modeRegistry } = modesMod;
   const { initUI } = uiMod;
   const { initGestures } = gesturesMod;
   const { initNotify } = notifyMod;
 
+// Bridge modules that use window.app.events / window.events (themes.js) to the state bus.
+window.events = { on, off, emit };
+window.app.events = window.events;
+
+
   // ---------- One toast HUD instance ----------
-  initNotify({ bus: { on }, labelsForMode });
+  initNotify({ bus: { on }, labelsForMode, labelsForGenreStyle, debug: true });
 
   // ---------- Canvas / 2D context ----------
   const canvas = document.getElementById('canvas');

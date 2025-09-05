@@ -37,6 +37,50 @@ export const fire = (() => {
   const TARGET_FPS = 30;
   const MAX_GLOW = 6;
 
+// --- Fire height step display ---
+const HEIGHT_STEPS_TOTAL = 10;   // ← change this if you want 12, 16, etc.
+
+/**
+ * Convert a continuous height boost value into a 1-based step index.
+ * @param {number} boost - Current boost value to map.
+ * @param {number} minBoost - Minimum boost in the allowed range.
+ * @param {number} maxBoost - Maximum boost in the allowed range.
+ * @param {number} [total] - Total number of discrete steps.
+ * @returns {number} 1-based index in the range [1, total].
+ */
+function heightIndexFromBoost(boost, minBoost, maxBoost, total = HEIGHT_STEPS_TOTAL) {
+  const t = (boost - minBoost) / (maxBoost - minBoost);      // 0..1
+  const idx0 = Math.round(t * (total - 1));                  // 0..total-1
+  return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
+}
+
+// --- Fire fuel step display ---
+const FUEL_STEPS_TOTAL = 10;  // change if you want 12, 16, etc.
+
+/**
+ * Convert a continuous fuel fraction into a 1-based step index.
+ * @param {number} frac - Current fuel fraction (e.g., 0.12).
+ * @param {number} minFrac - Minimum fraction in the allowed range.
+ * @param {number} maxFrac - Maximum fraction in the allowed range.
+ * @param {number} [total] - Total number of discrete steps.
+ * @returns {number} 1-based index in the range [1, total].
+ */
+function fuelIndexFromFrac(frac, minFrac, maxFrac, total = FUEL_STEPS_TOTAL) {
+  const t = (frac - minFrac) / (maxFrac - minFrac);          // 0..1
+  const idx0 = Math.round(t * (total - 1));                  // 0..total-1
+  return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
+}
+/**
+ * Emit the current fuel step index for toast coalescing.
+ * @returns {void}
+ */
+function emitFuelStep() {
+  const index = fuelIndexFromFrac(FUEL_ROWS_FRAC, MIN_FUEL, MAX_FUEL);
+  const bus = (window.app && window.app.events) || window.events;
+  bus?.emit?.('fire.fuel.step', { index, total: FUEL_STEPS_TOTAL });
+}
+
+
   // Live-tuned
   let FUEL_ROWS_FRAC = 0.12;
   let HEIGHT_BOOST = 1.25;
@@ -93,74 +137,49 @@ export const fire = (() => {
   let lastT = 0,
     acc = 0;
 
-  // HUD
-  let hudText = '';
-  let hudUntil = 0;
-
   const dtTarget = 1000 / TARGET_FPS;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   // Utils
 
   /**
-   *
-   */
-  function showHUD() {
-    hudText = `height:${HEIGHT_BOOST.toFixed(2)}  fuel:${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`;
-    hudUntil = nowMs() + 1500;
-  }
-
-  // Hotkeys (hold Shift)
-  /**
-   * Handle Shift+Arrow hotkeys to tweak flame height and fuel band.
+   * Hotkeys (hold Shift) — tweak height/fuel and emit indexed height step
    * @param {*} e - KeyboardEvent from window.
    * @returns {void}
    */
-  function onKey(e) {
-    if (!e.shiftKey) return;
-    switch (e.key) {
-      case 'ArrowUp':
-        HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `height: ${HEIGHT_BOOST.toFixed(2)}`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowDown':
-        HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `height: ${HEIGHT_BOOST.toFixed(2)}`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowRight':
-        FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `fuel: ${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
-      case 'ArrowLeft':
-        FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
-        emit('notify', {
-          kind: 'type',
-          title: 'Fire',
-          value: `fuel: ${(FUEL_ROWS_FRAC * 100).toFixed(0)}%`,
-          ttl: 1200,
-        });
-        showHUD();
-        break;
+// Hotkeys (hold Shift) — tweak height/fuel and emit indexed steps
+function onKey(e) {
+  if (!e.shiftKey) return;
+  switch (e.key) {
+    case 'ArrowUp': {
+      HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
+      emit('fire.height', Number(HEIGHT_BOOST));
+      emitHeightStep();
+      break;
+    }
+    case 'ArrowDown': {
+      HEIGHT_BOOST = clamp(HEIGHT_BOOST - 0.05, MIN_BOOST, MAX_BOOST);
+      emit('fire.height', Number(HEIGHT_BOOST));
+      emitHeightStep();
+      break;
+    }
+    case 'ArrowRight': {
+      FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent for internal use
+      emitFuelStep();                                      // NEW: indexed toast payload
+      break;
+    }
+    case 'ArrowLeft': {
+      FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100));
+      emitFuelStep();
+      break;
     }
   }
+}
+
+
+
 
   // ----- Geometry/state rebuild (no drawing) -----
   /**
@@ -196,6 +215,20 @@ export const fire = (() => {
 
     rebuild(ctx);
     lastT = nowMs();
+
+    // React to external UI changes (sliders/gestures)
+  const bus = (window.app && window.app.events) || window.events;
+  if (bus?.on) {
+    bus.on('fire.height', (h) => {
+      HEIGHT_BOOST = clamp(Number(h) || HEIGHT_BOOST, MIN_BOOST, MAX_BOOST);
+    });
+    bus.on('fire.fuel', (p) => {
+      const frac = clamp((Number(p) || 0) / 100, MIN_FUEL, MAX_FUEL);
+      FUEL_ROWS_FRAC = frac;
+      emitFuelStep();
+    });
+  }
+    window.addEventListener('keydown', onKey, { passive: true });
   }
 
   /**
@@ -223,6 +256,13 @@ export const fire = (() => {
   function stop() {
     running = false;
     window.removeEventListener('keydown', onKey);
+
+    window.removeEventListener('keydown', onKey, { passive: true });
+  const bus = (window.app && window.app.events) || window.events;
+  if (bus?.off) {
+    bus.off('fire.height', /* same ref as above */);
+    bus.off('fire.fuel',   /* same ref as above */);
+  }
   }
 
   /**
@@ -336,19 +376,6 @@ export const fire = (() => {
       g.shadowColor = 'transparent';
     }
 
-    // HUD overlay
-    if (now < hudUntil) {
-      g.globalAlpha = 0.9;
-      g.fillStyle = 'rgba(0,0,0,0.5)';
-      g.font = `12px ui-monospace, SFMono-Regular, Menlo, monospace`;
-      const pad = 6,
-        text = hudText,
-        tw = g.measureText(text).width;
-      g.fillRect(8, 8, tw + pad * 2, 20);
-      g.globalAlpha = 1;
-      g.fillStyle = '#fff';
-      g.fillText(text, 8 + pad, 10);
-    }
   }
 
   return { init, resize, start, stop, frame, clear };
