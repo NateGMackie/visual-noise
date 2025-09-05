@@ -1,228 +1,356 @@
-// src/js/ui/notify.js
 /* eslint-env browser */
-// One tiny toast/HUD with a tiny API.
-// API: notify({kind, title, value, ttl=1200})
-// Helpers: notifySpeed(v), notifyMode(v), notifyType(v), notifyTheme(v)
-// Accessibility: aria-live="polite", role="status"
+/**
+ * Visual Noise — Toast Notifications (UI Wire-up + Coalescing)
+ * ------------------------------------------------------------
+ * Channels:
+ *  - 'notify.genre'
+ *  - 'notify.style'
+ *  - 'notify.vibe'
+ *  - 'notify.speed'  (coalesced)
+ *  - 'notify.state'  (pause/clear)
+ *  - 'notify.power'  (screen awake)
+ *
+ * Legacy aliases:
+ *  - NOTIFY.system  -> 'notify.genre'
+ *  - NOTIFY.program -> 'notify.style'
+ */
 
-const DEFAULT_TTL = 1200;
+const NOTIFY = Object.freeze({
+  // Canonical
+  genre: 'notify.genre',
+  style: 'notify.style',
+  vibe:  'notify.vibe',
+  speed: 'notify.speed',
+  state: 'notify.state',
+  power: 'notify.power',
+  // Legacy aliases
+  system: 'notify.genre',
+  program: 'notify.style',
+});
+
+// -------------------------
+// Configuration
+// -------------------------
+const DEFAULTS = {
+  durationMs: 2600,
+  staggerMs: 220,
+  coalesceWindowMs: 350,
+  maxVisible: 3,
+  position: 'bottom-right', // 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  debug: false,
+};
+
+// Per-channel overrides (optional)
+const CHANNEL_OPTIONS = {
+  [NOTIFY.speed]: { coalesce: true, durationMs: 1200 },
+  // Example: [NOTIFY.vibe]: { durationMs: 1800 },
+};
+
+// -------------------------
+// Internal state
+// -------------------------
+let _container;
+const _toasts = new Map();          // id -> record
+const _latestByChannel = new Map(); // channel -> id
+let _seq = 0;
+
+let _wired = false;                 // bus wire-up guard
+let _busOn = null;                  // function
+let _labelsForMode = null;          // function (legacy)
+let _labelsForGenreStyle = null;    // function (new)
+let _pending = [];                  // queued toasts before body exists
+
+// -------------------------
+// DOM bootstrapping
+// -------------------------
+function ensureContainer() {
+  // If body isn't ready yet, defer and return null.
+  if (!_container) {
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', () => {
+        if (!_container) _container = createContainer();
+        flushPending();
+      }, { once: true });
+      return null;
+    }
+    _container = createContainer();
+    flushPending();
+  }
+  return _container;
+}
+
+function createContainer() {
+  const wrap = document.createElement('div');
+  wrap.setAttribute('id', 'vn-toasts');
+  wrap.setAttribute('aria-live', 'polite');
+  wrap.style.position = 'fixed';
+  const [v, h] = DEFAULTS.position.split('-');
+  wrap.style[v === 'top' ? 'top' : 'bottom'] = '12px';
+  wrap.style[h === 'left' ? 'left' : 'right'] = '12px';
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = v === 'top' ? 'column' : 'column-reverse';
+  wrap.style.gap = '8px';
+  wrap.style.zIndex = 2147483646;
+  document.body.appendChild(wrap);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .vn-toast {
+      font: 500 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #fff;
+      background: rgba(20,24,28,0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+      max-width: 72vw;
+      transform: translateY(8px);
+      opacity: 0;
+      transition: transform 150ms ease, opacity 150ms ease;
+      pointer-events: auto;
+      backdrop-filter: saturate(120%) blur(6px);
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+    .vn-toast.vn-in { transform: translateY(0); opacity: 1; }
+    .vn-toast__title { opacity: 0.75; margin: 0 0 2px; font-weight: 600; font-size: 11px; letter-spacing: .3px; text-transform: uppercase; }
+    .vn-toast__msg { margin: 0; word-wrap: break-word; }
+  `;
+  document.head.appendChild(style);
+  return wrap;
+}
+
+function flushPending() {
+  if (!_container || !_pending.length) return;
+  for (const p of _pending) {
+    _renderToast(p.channel, p.title, p.message, p.durationMs);
+  }
+  _pending.length = 0;
+}
+
+// -------------------------
+// Helpers
+// -------------------------
+function getChannelOpts(channel) {
+  return Object.assign({}, DEFAULTS, CHANNEL_OPTIONS[channel] || {});
+}
+
+function now() {
+  return performance?.now?.() ?? Date.now();
+}
+
+function capVisible() {
+  const toasts = Array.from(_toasts.values()).sort((a, b) => a.createdAt - b.createdAt);
+  const excess = Math.max(0, toasts.length - DEFAULTS.maxVisible);
+  for (let i = 0; i < excess; i++) hideToast(toasts[i]);
+}
+
+function hideToast(rec) {
+  if (!rec || !rec.el) return;
+  clearTimeout(rec.hideTimer);
+  rec.el.classList.remove('vn-in');
+  setTimeout(() => {
+    if (rec.el && rec.el.parentNode) rec.el.parentNode.removeChild(rec.el);
+  }, 160);
+  _toasts.delete(rec.id);
+  if (_latestByChannel.get(rec.channel) === rec.id) _latestByChannel.delete(rec.channel);
+}
+
+function scheduleHide(rec, durationMs) {
+  clearTimeout(rec.hideTimer);
+  rec.hideTimer = setTimeout(() => hideToast(rec), durationMs);
+}
+
+function _renderToast(channel, title, message, durationMs) {
+  // If container still not ready, buffer.
+  if (!ensureContainer()) {
+    _pending.push({ channel, title, message, durationMs });
+    return { id: null };
+  }
+
+  capVisible();
+
+  const el = document.createElement('div');
+  el.className = 'vn-toast';
+  el.setAttribute('data-channel', channel);
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'vn-toast__title';
+  titleEl.textContent = title;
+
+  const msgEl = document.createElement('div');
+  msgEl.className = 'vn-toast__msg';
+  msgEl.textContent = message;
+
+  el.appendChild(titleEl);
+  el.appendChild(msgEl);
+  _container.appendChild(el);
+
+  requestAnimationFrame(() => el.classList.add('vn-in'));
+
+  const id = `t${++_seq}`;
+  const rec = { id, el, channel, createdAt: now(), hideTimer: null };
+  _toasts.set(id, rec);
+  _latestByChannel.set(channel, id);
+  scheduleHide(rec, durationMs);
+  el.addEventListener('click', () => hideToast(rec));
+  return rec;
+}
+
+function titleForChannel(channel) {
+  switch (channel) {
+    case NOTIFY.genre: return 'Genre';
+    case NOTIFY.style: return 'Style';
+    case NOTIFY.vibe:  return 'Vibe';
+    case NOTIFY.speed: return 'Speed';
+    case NOTIFY.state: return 'State';
+    case NOTIFY.power: return 'Power';
+    default: return 'Notice';
+  }
+}
+
+// -------------------------
+// Public API
+// -------------------------
+function notify(channel, message, opts = {}) {
+  const conf = Object.assign({}, getChannelOpts(channel), opts);
+  const title = opts.title || titleForChannel(channel);
+
+  if (conf.debug ?? DEFAULTS.debug) {
+    console.info('[notify]', channel, message, conf);
+  }
+
+  // Coalesce updates
+  if (conf.coalesce) {
+    const existingId = _latestByChannel.get(channel);
+    if (existingId) {
+      const rec = _toasts.get(existingId);
+      if (rec && rec.el) {
+        const age = now() - rec.createdAt;
+        if (age <= conf.coalesceWindowMs || true) {
+          const msgEl = rec.el.querySelector('.vn-toast__msg');
+          const titleEl = rec.el.querySelector('.vn-toast__title');
+          if (titleEl) titleEl.textContent = title;
+          if (msgEl) msgEl.textContent = message;
+          scheduleHide(rec, conf.durationMs);
+          return rec.id;
+        }
+      }
+    }
+  }
+
+  const rec = _renderToast(channel, title, message, conf.durationMs);
+  return rec.id;
+}
+
+function notifyGenreAndStyle(genreLabel, styleLabel, staggerMs = DEFAULTS.staggerMs) {
+  notify(NOTIFY.genre, genreLabel);
+  setTimeout(() => notify(NOTIFY.style, styleLabel), Math.max(120, Math.min(staggerMs, 400)));
+}
+const notifySystemAndProgram = notifyGenreAndStyle;
+
+function setChannelOptions(channel, options) {
+  CHANNEL_OPTIONS[channel] = Object.assign({}, CHANNEL_OPTIONS[channel] || {}, options);
+}
+
+function clearChannel(channel) {
+  const id = _latestByChannel.get(channel);
+  if (!id) return;
+  const rec = _toasts.get(id);
+  hideToast(rec);
+}
 
 /**
- * Initialize the toast HUD and wire it to an event bus.
- * @param {{bus:any, labelsForMode:(id:string)=>{familyLabel?:string,typeLabel?:string}}} root0 - Object containing the app bus and a label resolver.
- * @returns {{
- *   notify:(opts:{kind?:string,title?:string,value?:any,ttl?:number})=>void,
- *   notifySpeed:(v:any)=>void,
- *   notifyMode:(modeKey:string)=>void,
- *   notifyType:(modeKey:string,typeKey:string)=>void,
- *   notifyTheme:(v:any)=>void,
- *   dispose:()=>void
- * }} Notifier API with helpers and a dispose function.
+ * Initializes notifications. Safe to call before <body> exists.
+ * Options:
+ *  - bus.on: function(eventName, handler)
+ *  - labelsForMode(name) OR labelsForGenreStyle(name)
+ *  - position, debug, staggerMs, durationMs, maxVisible
  */
-export function initNotify({ bus, labelsForMode }) {
-  const root = ensureRoot();
-  const queue = new Set();
-  const _ignore = () => {}; // used to silence empty-catch without side effects
+function initNotify(options = {}) {
+  Object.assign(DEFAULTS, pick(options, ['position', 'debug', 'staggerMs', 'durationMs', 'maxVisible']));
 
-  /**
-   * Ensure the HUD root exists in the DOM.
-   * @returns {any} HUD container element.
-   */
-  function ensureRoot() {
-    let el = document.getElementById('hud-toasts');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'hud-toasts';
-      el.className = 'hud-toasts';
-      el.setAttribute('role', 'status');
-      el.setAttribute('aria-live', 'polite');
-      document.body.appendChild(el);
+  // Grab bus + label helpers if provided
+  _busOn = options?.bus?.on || null;
+  _labelsForMode = typeof options?.labelsForMode === 'function' ? options.labelsForMode : null;
+  _labelsForGenreStyle = typeof options?.labelsForGenreStyle === 'function' ? options.labelsForGenreStyle : null;
+
+  // Do NOT force container creation; we’ll defer until first toast.
+
+  if (_busOn && !_wired) {
+    wireBus(_busOn);
+    _wired = true;
+  }
+}
+
+function wireBus(on) {
+  // Mode/Genre change => show two toasts (genre+style)
+  const startLabelsFor = (modeName) => {
+    if (_labelsForGenreStyle) {
+      const out = _labelsForGenreStyle(modeName);
+      notifyGenreAndStyle(out.genreLabel, out.styleLabel);
+    } else if (_labelsForMode) {
+      const { familyLabel, typeLabel } = _labelsForMode(modeName);
+      notifyGenreAndStyle(familyLabel, typeLabel);
+    } else {
+      // Fallback: just echo the key
+      notifyGenreAndStyle(String(modeName || 'Unknown'), 'Default');
     }
-    return el;
-  }
+  };
 
-  /**
-   * Remove a toast element with transition.
-   * @param {any} el - Toast element to destroy.
-   * @returns {void} Nothing.
-   */
-  function destroyToast(el) {
-    queue.delete(el);
-    if (!el) return;
-    el.classList.add('hide');
-    // Remove after transition
-    el.addEventListener('transitionend', () => el.remove(), { once: true });
-  }
+  // New + legacy (mode/genre)
+  on('genre', startLabelsFor);
+  on('mode', startLabelsFor);
 
-  /**
-   * Show a toast.
-   * @param {{kind?:string,title?:string,value?:any,ttl?:number}} root0 - Options for the toast.
-   * @param {string} [root0.kind] - Kind/tag for styling.
-   * @param {string} [root0.title] - Short label shown on the left.
-   * @param {any} [root0.value] - Optional value shown on the right.
-   * @param {number} [root0.ttl] - Time to live in ms.
-   * @returns {void} Nothing.
-   */
-  function notify({ kind, title, value, ttl = DEFAULT_TTL }) {
-    const el = document.createElement('div');
-    el.className = `toast ${kind || 'info'}`;
-    el.innerHTML = `
-      <div class="toast-row">
-        <span class="toast-title">${escapeHTML(title || '')}</span>
-        ${value != null ? `<span class="toast-value">${escapeHTML(String(value))}</span>` : ''}
-      </div>
-    `;
-    root.appendChild(el);
-    // Force layout for transition
-    void el.offsetWidth;
-    el.classList.add('show');
+  // Style/Flavor
+  on('style',  (id) => notify(NOTIFY.style, String(id)));
+  on('flavor', (id) => notify(NOTIFY.style, String(id)));
 
-    queue.add(el);
-    window.setTimeout(() => destroyToast(el), ttl);
-  }
+  // Vibe/Theme
+  on('vibe',  (v) => notify(NOTIFY.vibe,  String(v)));
+  on('theme', (v) => notify(NOTIFY.vibe,  String(v))); // legacy alias
 
-  // Helper notifiers
-  /**
-   * Notify current speed.
-   * @param {any} v - Speed value to display.
-   * @returns {void} Nothing.
-   */
-  function notifySpeed(v) {
-    notify({ kind: 'speed', title: 'Speed', value: String(v) });
-  }
-  /**
-   * Notify current mode (family | type).
-   * @param {string} modeKey - Mode key to resolve into labels.
-   * @returns {void} Nothing.
-   */
-  function notifyMode(modeKey) {
-    // labelsForMode(modeKey) -> { familyLabel, typeLabel }
-    const lbls = typeof labelsForMode === 'function' ? labelsForMode(modeKey) : null;
-    const fam = lbls?.familyLabel ?? modeKey;
-    const type = lbls?.typeLabel ?? '';
-    const value = type ? `${fam} | type: ${type}` : `${fam}`;
-    notify({ kind: 'mode', title: 'Mode', value });
-  }
-
-  /**
-   * Notify current type/flavor for the mode.
-   * @param {string} modeKey - Mode key that the flavor belongs to.
-   * @param {string} typeKey - Flavor/type key to display.
-   * @returns {void} Nothing.
-   */
-  function notifyType(modeKey, typeKey) {
-    const lbls = typeof labelsForMode === 'function' ? labelsForMode(modeKey) : null;
-    const fam = lbls?.familyLabel ?? modeKey;
-    const flav = tryLabel(labelsForMode, modeKey, typeKey) ?? typeKey;
-    notify({ kind: 'type', title: 'Type', value: `${fam} | type: ${flav}` });
-  }
-  /**
-   * Notify current theme/vibe.
-   * @param {any} v - Theme/vibe name.
-   * @returns {void} Nothing.
-   */
-  function notifyTheme(v) {
-    notify({ kind: 'theme', title: 'Theme', value: String(v) });
-  }
-
-  // Subscribe to your state bus to fire toasts automatically.
-  // Adjust event names here if your bus uses different ones.
-  const unsubs = wireBus(bus, {
-    speed: (payload) => notifySpeed(payload?.value ?? payload),
-    mode: (payload) => notifyMode(payload?.value ?? payload),
-    flavor: (payload) => {
-      const modeKey = payload?.modeId;
-      const flavKey = payload?.flavorId;
-      const lbls = typeof labelsForMode === 'function' ? labelsForMode(modeKey) : null;
-      const fam = lbls?.familyLabel ?? modeKey;
-      // Try to resolve a pretty label for the flavor; fall back to the key
-      const flavLabel = tryLabel(labelsForMode, modeKey, flavKey) ?? flavKey;
-      notify({ kind: 'type', title: 'Type', value: `${fam} | type: ${flavLabel}` });
-    },
-    notify: (payload) => {
-      // Accept { kind, title, value, ttl } from any module
-      if (payload && typeof payload === 'object') notify(payload);
-    },
-    theme: (payload) => notifyTheme(payload?.value ?? payload),
+  // Speed (coalesced)
+  on('speed', (s) => {
+    const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
+    notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
   });
 
-  /**
-   * Dispose HUD, unsubscribe bus listeners, and remove any remaining toasts.
-   * @returns {void} Nothing.
-   */
-  function dispose() {
-    unsubs.forEach((u) => {
-      try {
-        u();
-      } catch (e) {
-        _ignore(e);
-      }
-    });
-    // remove all toasts
-    [...queue].forEach(destroyToast);
+  // Paused/Resumed
+  on('paused', (p) => notify(NOTIFY.state, p ? 'Paused' : 'Resumed'));
+
+  // Clear
+  on('clear', () => notify(NOTIFY.state, 'Cleared'));
+
+  // Power (screen awake)
+  on('power', (isOn) => notify(NOTIFY.power, `Screen awake: ${isOn ? 'ON' : 'OFF'}`));
+}
+
+// Dev helper: attach to window for quick manual tests.
+function exposeToWindow() {
+  if (typeof window !== 'undefined') {
+    window.NOTIFY = NOTIFY;
+    window.notify = notify;
+    window.notifyGenreAndStyle = notifyGenreAndStyle;
+    window.notifySystemAndProgram = notifySystemAndProgram;
+    window.initNotify = initNotify;
   }
-
-  return {
-    notify,
-    notifySpeed,
-    notifyMode,
-    notifyType,
-    notifyTheme,
-    dispose,
-  };
 }
 
-/**
- * Wire multiple event handlers to a simple bus ({ on, off }).
- * @param {any} bus - An object with at least an `on(evt, fn)` method and optional `off(evt, fn)`.
- * @param {Record<string, Function>} handlers - Map of event name → handler.
- * @returns {Array<Function>} Array of unsubscribe functions.
- */
-function wireBus(bus, handlers) {
-  if (!bus || typeof bus.on !== 'function') return [];
-  const unsubs = [];
-  for (const [evt, fn] of Object.entries(handlers)) {
-    if (!fn) continue;
-    const off = bus.on(evt, fn);
-    // Support both "return unsubscribe" and "off(evt,fn)" styles
-    if (typeof off === 'function') {
-      unsubs.push(off);
-    } else if (typeof bus.off === 'function') {
-      unsubs.push(() => bus.off(evt, fn));
-    }
-  }
-  return unsubs;
+// Small util
+function pick(obj, keys) {
+  const out = {};
+  for (const k of keys) if (k in obj) out[k] = obj[k];
+  return out;
 }
 
-/**
- * Best-effort pretty label lookup for a flavor/type within a mode.
- * @param {(id:string)=>{type?:Record<string,string>,mode?:string}} labelsForMode - Resolver that returns label info for a mode key.
- * @param {string} modeKey - Mode key to resolve.
- * @param {string} typeKey - Flavor/type key to look up within the mode.
- * @returns {string|null} A human-friendly label or null if unknown.
- */
-function tryLabel(labelsForMode, modeKey, typeKey) {
-  try {
-    if (typeof labelsForMode === 'function') {
-      const lbls = labelsForMode(modeKey);
-      if (lbls?.type && typeKey in lbls.type) return lbls.type[typeKey];
-      if (lbls?.mode) return lbls.mode; // fallback to mode label if present
-    }
-  } catch (e) {
-    // swallow label errors (non-fatal)
-    void e; // mark as used without side effects
-  }
-  return null;
-}
-
-/**
- * Escape HTML special characters.
- * @param {string} s - Raw text.
- * @returns {string} Escaped text safe for innerHTML.
- */
-function escapeHTML(s) {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c]
-  );
-}
+export {
+  NOTIFY,
+  notify,
+  notifyGenreAndStyle,
+  notifySystemAndProgram,
+  setChannelOptions,
+  clearChannel,
+  initNotify,
+  exposeToWindow,
+};

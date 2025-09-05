@@ -55,14 +55,10 @@ export function installHotkeys({
 
       // Helper to safely call and prevent defaults
       const doAct = (fn, ...args) => {
-        try {
-          fn?.(...args);
-        } catch (err) {
-          void err; // swallow handler errors to keep hotkeys resilient
-        }
-        e.preventDefault();
-        e.stopPropagation();
-      };
+  try { fn?.(...args); } catch (err) { void err; }
+  e.preventDefault();
+  e.stopPropagation();
+};
 
       // --- Controls toggle ---
       if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
