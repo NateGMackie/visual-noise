@@ -39,23 +39,41 @@ export const fire = (() => {
 
 // --- Fire height step display ---
 const HEIGHT_STEPS_TOTAL = 10;   // ← change this if you want 12, 16, etc.
+
+/**
+ * Convert a continuous height boost value into a 1-based step index.
+ * @param {number} boost - Current boost value to map.
+ * @param {number} minBoost - Minimum boost in the allowed range.
+ * @param {number} maxBoost - Maximum boost in the allowed range.
+ * @param {number} [total] - Total number of discrete steps.
+ * @returns {number} 1-based index in the range [1, total].
+ */
 function heightIndexFromBoost(boost, minBoost, maxBoost, total = HEIGHT_STEPS_TOTAL) {
   const t = (boost - minBoost) / (maxBoost - minBoost);      // 0..1
   const idx0 = Math.round(t * (total - 1));                  // 0..total-1
   return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
 }
-function emitHeightStep() {
-  const index = heightIndexFromBoost(HEIGHT_BOOST, MIN_BOOST, MAX_BOOST);
-  const bus = (window.app && window.app.events) || window.events;
-  bus?.emit?.('fire.height.step', { index, total: HEIGHT_STEPS_TOTAL });
-}
+
 // --- Fire fuel step display ---
 const FUEL_STEPS_TOTAL = 10;  // change if you want 12, 16, etc.
+
+/**
+ * Convert a continuous fuel fraction into a 1-based step index.
+ * @param {number} frac - Current fuel fraction (e.g., 0.12).
+ * @param {number} minFrac - Minimum fraction in the allowed range.
+ * @param {number} maxFrac - Maximum fraction in the allowed range.
+ * @param {number} [total] - Total number of discrete steps.
+ * @returns {number} 1-based index in the range [1, total].
+ */
 function fuelIndexFromFrac(frac, minFrac, maxFrac, total = FUEL_STEPS_TOTAL) {
   const t = (frac - minFrac) / (maxFrac - minFrac);          // 0..1
   const idx0 = Math.round(t * (total - 1));                  // 0..total-1
   return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
 }
+/**
+ * Emit the current fuel step index for toast coalescing.
+ * @returns {void}
+ */
 function emitFuelStep() {
   const index = fuelIndexFromFrac(FUEL_ROWS_FRAC, MIN_FUEL, MAX_FUEL);
   const bus = (window.app && window.app.events) || window.events;

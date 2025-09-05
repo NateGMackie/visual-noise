@@ -323,14 +323,23 @@ export function stepSpeed(delta) {
   setSpeed((active.speed ?? 5) + Math.sign(delta) * step);
 }
 
-// --- Fire controls (canonical emitters) ---
-/** Clamp & emit fire height (0..100 typical; adjust as needed). */
+/**
+ * Clamp & emit fire height (0..100).
+ * Accepts number-like input and coerces with Number().
+ * @param {number|string} next - Target height value; will be clamped between 0 and 100.
+ * @returns {void}
+ */
 export function setFireHeight(next) {
   const h = Math.max(0, Math.min(100, Number(next)));
   emit('fire.height', h);
 }
 
-/** Clamp & emit fire fuel (0..100 typical; adjust as needed). */
+/**
+ * Clamp & emit fire fuel (0..100).
+ * Accepts number-like input and coerces with Number().
+ * @param {number|string} next - Target fuel value; will be clamped between 0 and 100.
+ * @returns {void}
+ */
 export function setFireFuel(next) {
   const f = Math.max(0, Math.min(100, Number(next)));
   emit('fire.fuel', f);
