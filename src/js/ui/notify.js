@@ -1,22 +1,13 @@
 /* eslint-env browser */
 /**
- * Visual Noise — Toast Notifications (UI Wire-up + Coalescing)
- * ------------------------------------------------------------
- * Channels:
- *  - 'notify.genre'
- *  - 'notify.style'
- *  - 'notify.vibe'
- *  - 'notify.speed'  (coalesced)
- *  - 'notify.state'  (pause/clear)
- *  - 'notify.power'  (screen awake)
- *
- * Legacy aliases:
- *  - NOTIFY.system  -> 'notify.genre'
- *  - NOTIFY.program -> 'notify.style'
+ * Visual Noise — Toast Notifications (bottom-center, capsule, accents)
+ * Keeps your existing API & bus wiring. Changes:
+ *  - Default position: bottom-center (new)
+ *  - Capsule shape, roomier padding, horizontal row layout
+ *  - Per-channel color accents (genre/style/vibe/other)
  */
 
 const NOTIFY = Object.freeze({
-  // Canonical
   genre: 'notify.genre',
   style: 'notify.style',
   vibe:  'notify.vibe',
@@ -38,37 +29,35 @@ const DEFAULTS = {
   staggerMs: 220,
   coalesceWindowMs: 350,
   maxVisible: 3,
-  position: 'bottom-right', // 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  // NEW: support 'bottom-center' (default)
+  position: 'bottom-center', // 'bottom-center' | 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'top-center'
   debug: false,
 };
 
-// Per-channel overrides (optional)
 const CHANNEL_OPTIONS = {
-  [NOTIFY.speed]: { coalesce: true, durationMs: 1200 },
+  [NOTIFY.speed]:      { coalesce: true, durationMs: 900 },
   [NOTIFY.fireHeight]: { coalesce: true, durationMs: 900 },
   [NOTIFY.fireFuel]:   { coalesce: true, durationMs: 900 },
-  // Example: [NOTIFY.vibe]: { durationMs: 1800 },
 };
 
 // -------------------------
 // Internal state
 // -------------------------
 let _container;
-const _toasts = new Map();          // id -> record
-const _latestByChannel = new Map(); // channel -> id
+const _toasts = new Map();
+const _latestByChannel = new Map();
 let _seq = 0;
 
-let _wired = false;                 // bus wire-up guard
-let _busOn = null;                  // function
-let _labelsForMode = null;          // function (legacy)
-let _labelsForGenreStyle = null;    // function (new)
-let _pending = [];                  // queued toasts before body exists
+let _wired = false;
+let _busOn = null;
+let _labelsForMode = null;
+let _labelsForGenreStyle = null;
+let _pending = [];
 
 // -------------------------
 // DOM bootstrapping
 // -------------------------
 function ensureContainer() {
-  // If body isn't ready yet, defer and return null.
   if (!_container) {
     if (!document.body) {
       document.addEventListener('DOMContentLoaded', () => {
@@ -85,40 +74,103 @@ function ensureContainer() {
 
 function createContainer() {
   const wrap = document.createElement('div');
-  wrap.setAttribute('id', 'vn-toasts');
+  wrap.id = 'vn-toasts';
   wrap.setAttribute('aria-live', 'polite');
   wrap.style.position = 'fixed';
-  const [v, h] = DEFAULTS.position.split('-');
-  wrap.style[v === 'top' ? 'top' : 'bottom'] = '12px';
-  wrap.style[h === 'left' ? 'left' : 'right'] = '12px';
-  wrap.style.display = 'flex';
-  wrap.style.flexDirection = v === 'top' ? 'column' : 'column-reverse';
-  wrap.style.gap = '8px';
   wrap.style.zIndex = 2147483646;
+  wrap.style.pointerEvents = 'none'; // clicks pass through container
+
+  // Flex stack orientation
+  const pos = DEFAULTS.position;
+  const verticalTop = pos.startsWith('top-');
+  wrap.style.display = 'flex';
+  wrap.style.flexDirection = verticalTop ? 'column' : 'column-reverse';
+  wrap.style.gap = '8px';
+
+  // Position presets
+  const inset = '16px';
+  if (pos === 'bottom-center' || pos === 'top-center') {
+    wrap.style.left = '50%';
+    wrap.style.transform = 'translateX(-50%)';
+    if (verticalTop) wrap.style.top = inset; else wrap.style.bottom = inset;
+  } else {
+    const [v, h] = pos.split('-'); // e.g., bottom-right
+    wrap.style[v === 'top' ? 'top' : 'bottom'] = inset;
+    wrap.style[h === 'left' ? 'left' : 'right'] = inset;
+  }
+
   document.body.appendChild(wrap);
 
+  // Minimal CSS for capsule + row layout + accents
   const style = document.createElement('style');
   style.textContent = `
+    /* Container provides stacking only; each toast handles its own pointer events */
     .vn-toast {
-      font: 500 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      pointer-events: auto;
+      /* Capsule silhouette: long horizontal pill */
+      border-radius: 9999px;
+      /* Make text breathe + keep single-line layout comfy */
+      padding: 10px 14px;
+      /* Roomy width so content stays horizontal */
+      min-width: 200px;
+      max-width: 90vw;
+      /* Aesthetic base */
       color: #fff;
       background: rgba(20,24,28,0.92);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      padding: 10px 12px;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-      max-width: 72vw;
-      transform: translateY(8px);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+      /* Enter/exit */
       opacity: 0;
-      transition: transform 150ms ease, opacity 150ms ease;
-      pointer-events: auto;
-      backdrop-filter: saturate(120%) blur(6px);
+      transform: translateY(10px);
+      transition: transform 160ms ease, opacity 160ms ease;
       -webkit-font-smoothing: antialiased;
       user-select: none;
+      font: 500 13px/1.25 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      backdrop-filter: saturate(120%) blur(6px);
     }
     .vn-toast.vn-in { transform: translateY(0); opacity: 1; }
-    .vn-toast__title { opacity: 0.75; margin: 0 0 2px; font-weight: 600; font-size: 11px; letter-spacing: .3px; text-transform: uppercase; }
-    .vn-toast__msg { margin: 0; word-wrap: break-word; }
+
+    /* Horizontal content row */
+    .vn-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vn-title {
+      opacity: 0.8;
+      font-weight: 600;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+      font-size: 11px;
+      flex: 0 0 auto;
+    }
+    .vn-msg {
+      font-weight: 700;
+      min-width: 0; /* allow ellipsis */
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1 1 auto;
+    }
+
+    /* Subtle color accents by channel (genre/style/vibe vs other) */
+    .vn-toast[data-channel="${NOTIFY.genre}"] { background: rgba(20, 60, 40, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.style}"] { background: rgba(60, 20, 40, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.vibe}"]  { background: rgba(40, 40, 40, 0.92); }
+
+    /* Optional accents for others (tweak as desired) */
+    .vn-toast[data-channel="${NOTIFY.speed}"]     { background: rgba(40, 40, 70, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.state}"]     { background: rgba(30, 30, 30, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.power}"]     { background: rgba(30, 50, 60, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.fireHeight}"]{ background: rgba(60, 30, 10, 0.92); }
+    .vn-toast[data-channel="${NOTIFY.fireFuel}"]  { background: rgba(60, 30, 10, 0.92); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .vn-toast { transition: none; transform: none; }
+      .vn-toast.vn-in { transform: none; }
+    }
   `;
   document.head.appendChild(style);
   return wrap;
@@ -138,10 +190,7 @@ function flushPending() {
 function getChannelOpts(channel) {
   return Object.assign({}, DEFAULTS, CHANNEL_OPTIONS[channel] || {});
 }
-
-function now() {
-  return performance?.now?.() ?? Date.now();
-}
+function now() { return performance?.now?.() ?? Date.now(); }
 
 function capVisible() {
   const toasts = Array.from(_toasts.values()).sort((a, b) => a.createdAt - b.createdAt);
@@ -155,7 +204,7 @@ function hideToast(rec) {
   rec.el.classList.remove('vn-in');
   setTimeout(() => {
     if (rec.el && rec.el.parentNode) rec.el.parentNode.removeChild(rec.el);
-  }, 160);
+  }, 180);
   _toasts.delete(rec.id);
   if (_latestByChannel.get(rec.channel) === rec.id) _latestByChannel.delete(rec.channel);
 }
@@ -166,7 +215,6 @@ function scheduleHide(rec, durationMs) {
 }
 
 function _renderToast(channel, title, message, durationMs) {
-  // If container still not ready, buffer.
   if (!ensureContainer()) {
     _pending.push({ channel, title, message, durationMs });
     return { id: null };
@@ -178,18 +226,23 @@ function _renderToast(channel, title, message, durationMs) {
   el.className = 'vn-toast';
   el.setAttribute('data-channel', channel);
 
+  // Horizontal row
+  const row = document.createElement('div');
+  row.className = 'vn-row';
+
   const titleEl = document.createElement('div');
-  titleEl.className = 'vn-toast__title';
+  titleEl.className = 'vn-title';
   titleEl.textContent = title;
 
   const msgEl = document.createElement('div');
-  msgEl.className = 'vn-toast__msg';
+  msgEl.className = 'vn-msg';
   msgEl.textContent = message;
 
-  el.appendChild(titleEl);
-  el.appendChild(msgEl);
-  _container.appendChild(el);
+  row.appendChild(titleEl);
+  row.appendChild(msgEl);
+  el.appendChild(row);
 
+  _container.appendChild(el);
   requestAnimationFrame(() => el.classList.add('vn-in'));
 
   const id = `t${++_seq}`;
@@ -197,6 +250,7 @@ function _renderToast(channel, title, message, durationMs) {
   _toasts.set(id, rec);
   _latestByChannel.set(channel, id);
   scheduleHide(rec, durationMs);
+
   el.addEventListener('click', () => hideToast(rec));
   return rec;
 }
@@ -210,7 +264,7 @@ function titleForChannel(channel) {
     case NOTIFY.state: return 'State';
     case NOTIFY.power: return 'Power';
     case NOTIFY.fireHeight: return 'Fire • Height';
-case NOTIFY.fireFuel:   return 'Fire • Fuel';
+    case NOTIFY.fireFuel:   return 'Fire • Fuel';
     default: return 'Notice';
   }
 }
@@ -226,7 +280,6 @@ function notify(channel, message, opts = {}) {
     console.info('[notify]', channel, message, conf);
   }
 
-  // Coalesce updates
   if (conf.coalesce) {
     const existingId = _latestByChannel.get(channel);
     if (existingId) {
@@ -234,8 +287,8 @@ function notify(channel, message, opts = {}) {
       if (rec && rec.el) {
         const age = now() - rec.createdAt;
         if (age <= conf.coalesceWindowMs || true) {
-          const msgEl = rec.el.querySelector('.vn-toast__msg');
-          const titleEl = rec.el.querySelector('.vn-toast__title');
+          const msgEl = rec.el.querySelector('.vn-msg');
+          const titleEl = rec.el.querySelector('.vn-title');
           if (titleEl) titleEl.textContent = title;
           if (msgEl) msgEl.textContent = message;
           scheduleHide(rec, conf.durationMs);
@@ -266,22 +319,12 @@ function clearChannel(channel) {
   hideToast(rec);
 }
 
-/**
- * Initializes notifications. Safe to call before <body> exists.
- * Options:
- *  - bus.on: function(eventName, handler)
- *  - labelsForMode(name) OR labelsForGenreStyle(name)
- *  - position, debug, staggerMs, durationMs, maxVisible
- */
 function initNotify(options = {}) {
   Object.assign(DEFAULTS, pick(options, ['position', 'debug', 'staggerMs', 'durationMs', 'maxVisible']));
 
-  // Grab bus + label helpers if provided
   _busOn = options?.bus?.on || null;
   _labelsForMode = typeof options?.labelsForMode === 'function' ? options.labelsForMode : null;
   _labelsForGenreStyle = typeof options?.labelsForGenreStyle === 'function' ? options.labelsForGenreStyle : null;
-
-  // Do NOT force container creation; we’ll defer until first toast.
 
   if (_busOn && !_wired) {
     wireBus(_busOn);
@@ -290,7 +333,7 @@ function initNotify(options = {}) {
 }
 
 function wireBus(on) {
-  // Mode/Genre change => show two toasts (genre+style)
+  // Mode/Genre → two toasts
   const startLabelsFor = (modeName) => {
     if (_labelsForGenreStyle) {
       const out = _labelsForGenreStyle(modeName);
@@ -299,67 +342,58 @@ function wireBus(on) {
       const { familyLabel, typeLabel } = _labelsForMode(modeName);
       notifyGenreAndStyle(familyLabel, typeLabel);
     } else {
-      // Fallback: just echo the key
       notifyGenreAndStyle(String(modeName || 'Unknown'), 'Default');
     }
   };
 
-  // New + legacy (mode/genre)
   on('genre', startLabelsFor);
-  on('mode', startLabelsFor);
+  on('mode',  startLabelsFor);
 
-  // Style/Flavor
   on('style',  (id) => notify(NOTIFY.style, String(id)));
   on('flavor', (id) => notify(NOTIFY.style, String(id)));
 
-  // Vibe/Theme
   on('vibe',  (v) => notify(NOTIFY.vibe,  String(v)));
   on('theme', (v) => notify(NOTIFY.vibe,  String(v))); // legacy alias
 
-  // Speed (coalesced)
   on('speed', (s) => {
     const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
     notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
   });
-// Fire controls (slide/gesture): mirror speed-style coalescing
-on('fire.height', (h) => {
-  const val = (typeof h === 'number' && h.toFixed) ? h.toFixed(0) : String(h);
-  notify(NOTIFY.fireHeight, `Height: ${val}`, { coalesce: true });
-});
-// Height (indexed steps, e.g., { index: 3, total: 10 })
-on('fire.height.step', (p) => {
-  // Accept either object or JSON/string payloads
-  let index, total;
-  if (p && typeof p === 'object') {
-    ({ index, total } = p);
-  } else {
-    try { ({ index, total } = JSON.parse(p)); } catch (_) { /* noop */ }
-  }
-  if (Number.isFinite(index) && Number.isFinite(total)) {
-    notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
-  }
-});
 
-// Fuel (unchanged; percent integer)
-on('fire.fuel', (f) => {
-  const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
-  notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
-});
-on('fire.fuel', (f) => {
-  const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
-  notify(NOTIFY.fireFuel, `Fuel: ${val}`, { coalesce: true });
-});
-  // Paused/Resumed
   on('paused', (p) => notify(NOTIFY.state, p ? 'Paused' : 'Resumed'));
+  on('clear',  () => notify(NOTIFY.state, 'Cleared'));
+  on('power',  (isOn) => notify(NOTIFY.power, `Screen awake: ${isOn ? 'ON' : 'OFF'}`));
 
-  // Clear
-  on('clear', () => notify(NOTIFY.state, 'Cleared'));
+  // Fire controls (numeric + step)
+  on('fire.height', (h) => {
+    // If you prefer only steps, comment this numeric line out.
+    const val = typeof h === 'number' ? h.toFixed(2) : String(h);
+    notify(NOTIFY.fireHeight, `Height: ${val}×`, { coalesce: true });
+  });
+  on('fire.height.step', (payload) => {
+    let index, total;
+    if (payload && typeof payload === 'object') ({ index, total } = payload);
+    else { try { ({ index, total } = JSON.parse(payload)); } catch(_) {} }
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
+    }
+  });
 
-  // Power (screen awake)
-  on('power', (isOn) => notify(NOTIFY.power, `Screen awake: ${isOn ? 'ON' : 'OFF'}`));
+  // Keep one fuel numeric + one step handler (no duplicates)
+  on('fire.fuel', (f) => {
+    const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
+    notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
+  });
+  on('fire.fuel.step', (payload) => {
+    let index, total;
+    if (payload && typeof payload === 'object') ({ index, total } = payload);
+    else { try { ({ index, total } = JSON.parse(payload)); } catch(_) {} }
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.fireFuel, `Fuel: ${index}/${total}`, { coalesce: true });
+    }
+  });
 }
 
-// Dev helper: attach to window for quick manual tests.
 function exposeToWindow() {
   if (typeof window !== 'undefined') {
     window.NOTIFY = NOTIFY;
@@ -370,7 +404,6 @@ function exposeToWindow() {
   }
 }
 
-// Small util
 function pick(obj, keys) {
   const out = {};
   for (const k of keys) if (k in obj) out[k] = obj[k];

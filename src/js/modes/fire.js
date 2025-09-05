@@ -49,6 +49,18 @@ function emitHeightStep() {
   const bus = (window.app && window.app.events) || window.events;
   bus?.emit?.('fire.height.step', { index, total: HEIGHT_STEPS_TOTAL });
 }
+// --- Fire fuel step display ---
+const FUEL_STEPS_TOTAL = 10;  // change if you want 12, 16, etc.
+function fuelIndexFromFrac(frac, minFrac, maxFrac, total = FUEL_STEPS_TOTAL) {
+  const t = (frac - minFrac) / (maxFrac - minFrac);          // 0..1
+  const idx0 = Math.round(t * (total - 1));                  // 0..total-1
+  return Math.max(1, Math.min(total, idx0 + 1));             // 1..total
+}
+function emitFuelStep() {
+  const index = fuelIndexFromFrac(FUEL_ROWS_FRAC, MIN_FUEL, MAX_FUEL);
+  const bus = (window.app && window.app.events) || window.events;
+  bus?.emit?.('fire.fuel.step', { index, total: FUEL_STEPS_TOTAL });
+}
 
 
   // Live-tuned
@@ -117,13 +129,14 @@ function emitHeightStep() {
    * @param {*} e - KeyboardEvent from window.
    * @returns {void}
    */
+// Hotkeys (hold Shift) — tweak height/fuel and emit indexed steps
 function onKey(e) {
   if (!e.shiftKey) return;
   switch (e.key) {
     case 'ArrowUp': {
       HEIGHT_BOOST = clamp(HEIGHT_BOOST + 0.05, MIN_BOOST, MAX_BOOST);
-      emit('fire.height', Number(HEIGHT_BOOST));     // keep numeric for internal use
-      emitHeightStep();                               // NEW: indexed toast payload
+      emit('fire.height', Number(HEIGHT_BOOST));
+      emitHeightStep();
       break;
     }
     case 'ArrowDown': {
@@ -134,16 +147,19 @@ function onKey(e) {
     }
     case 'ArrowRight': {
       FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC + 0.01, MIN_FUEL, MAX_FUEL);
-      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent
+      emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100)); // percent for internal use
+      emitFuelStep();                                      // NEW: indexed toast payload
       break;
     }
     case 'ArrowLeft': {
       FUEL_ROWS_FRAC = clamp(FUEL_ROWS_FRAC - 0.01, MIN_FUEL, MAX_FUEL);
       emit('fire.fuel', Math.round(FUEL_ROWS_FRAC * 100));
+      emitFuelStep();
       break;
     }
   }
 }
+
 
 
 
@@ -191,6 +207,7 @@ function onKey(e) {
     bus.on('fire.fuel', (p) => {
       const frac = clamp((Number(p) || 0) / 100, MIN_FUEL, MAX_FUEL);
       FUEL_ROWS_FRAC = frac;
+      emitFuelStep();
     });
   }
     window.addEventListener('keydown', onKey, { passive: true });
