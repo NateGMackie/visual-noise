@@ -213,6 +213,48 @@ export function initUI() {
     }
   });
 
+  // --- Style click: cycle styles (a.k.a. flavors) within the current genre ---
+  // --- Style click: make the WHOLE label clickable, like genre/vibe ---
+const styleLabelEl = typeName?.closest('label') || typeName;
+makeClickable(styleLabelEl, (e) => {
+  // Rebuild the per-family style list (same approach as your keyboard handler)
+  const modes = Object.keys(registry);
+  const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
+  const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+  const byFamily = familyList.map((fam) => ({
+    family: fam,
+    modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
+  }));
+
+  const currentMode = cfg.persona;
+  const curFam  = meta[currentMode]?.familyLabel || '';
+  const curType = meta[currentMode]?.typeLabel   || '';
+  const famIdx = Math.max(0, familyList.indexOf(curFam));
+  const typesInFam = Array.from(
+    new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
+  );
+  if (!typesInFam.length) return;
+
+  // Click = next; Shift+click = previous (matches Shift+] / Shift+[)
+  const dir = e?.shiftKey ? -1 : +1;
+  const typeIdx  = Math.max(0, typesInFam.indexOf(curType));
+  const nextType =
+    typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
+
+  // Pick a mode in the same family having that next type, else first in family
+  const candidate =
+    byFamily[famIdx].modes.find((m) => meta[m]?.typeLabel === nextType) ||
+    byFamily[famIdx].modes[0];
+
+  if (candidate) {
+    setMode(candidate); // emits + updates cfg.persona
+    setModeLabel();     // refresh both genre & style text
+  }
+});
+
+
+
+
   // Fullscreen toggle
   if (fullBtn) {
     fullBtn.onclick = () => {

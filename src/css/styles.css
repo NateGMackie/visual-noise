@@ -92,7 +92,7 @@ button {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 30;
+  z-index: 2000;                /* higher than .reveal-edge (1001) */
   transform: translateY(100%);
   opacity: 0.001;
   pointer-events: none;
@@ -102,6 +102,7 @@ button {
   box-shadow: var(--controls-shadow);
   will-change: transform, opacity;
 }
+
 
 /* When visible, they slide up and accept interaction */
 #controls.is-visible {
@@ -116,16 +117,18 @@ body.has-controls-visible {
 }
 
 /* Mobile-only, invisible bottom-edge reveal zone */
+/* Bottom-edge reveal hit area (always interactive) */
 .reveal-edge {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 28px; /* comfortable tappable edge */
+  height: 28px;
   z-index: 1001;
-  pointer-events: none; /* disabled by default on desktop */
-  background: transparent; /* invisible */
+  background: transparent;
+  pointer-events: auto; /* <-- make it clickable on all devices */
 }
+
 
 /* Enable the edge only on touch/non-hover devices */
 @media (hover: none), (pointer: coarse) {
