@@ -1,154 +1,179 @@
+/* eslint-env browser */
 // src/js/ui/menu.js
-// Bottom menu wiring for Ambient Visual Noise (footer #controls)
 
-function el(root, sel) {
-  const n = root.querySelector(sel);
-  if (!n) console.warn(`[menu] Missing element: ${sel}`);
-  return n;
+import {
+  cfg,
+  setMode,
+  incSpeed,
+  decSpeed,
+  togglePause,
+  clearAll,
+  labelsForMode,
+} from '../state.js';
+import { registry } from '../modes/index.js';
+import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
+
+// Small helper (duplicated here so this file is self-contained)
+/**
+ * Make an element behave like a button and call a handler on activation.
+ * Adds keyboard support (Enter/Space) and a pointer cursor.
+ * @param {globalThis.HTMLElement | null} el - The element to make clickable (label/div/span/etc.).
+ * @param {(e: globalThis.Event) => void} onActivate - Handler invoked on click or keyboard activation.
+ * @returns {void}
+ */
+function makeClickable(el, onActivate) {
+  if (!el) return;
+  el.tabIndex = 0;
+  el.classList?.add('clickable');
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    onActivate?.(e);
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onActivate?.(e);
+    }
+  });
+}
+
+
+// Exposed so keyboard handler can keep the label in sync.
+/**
+ * Sync the Pause/Resume button text and aria state with cfg.paused.
+ * @returns {void}
+ */
+export function syncPauseButton() {
+  const btn = document.getElementById('pauseBtn');
+  if (!btn) return;
+  const paused = !!cfg.paused;
+  btn.textContent = paused ? 'Resume' : 'Pause';
+  btn.setAttribute('aria-pressed', String(paused));
+  btn.title = paused ? 'Resume (P)' : 'Pause (P)';
 }
 
 /**
- * Init the Bottom Menu UI.
- * @param {HTMLElement} footerEl - The footer root element (#controls).
- * @param {Object} api - Handlers provided by main.js (App facade).
- * @param {Function} api.getState - () => { genre, style, speed, paused, vibe? }
- * @param {Function} api.setGenre - (name) => void
- * @param {Function} api.setStyle - (id) => void
- * @param {Function} [api.cycleStyle] - (dir) => void
- * @param {Function} api.nextGenre - () => string
- * @param {Function} api.nextStyle - () => string
- * @param {Function} api.setSpeed - (num) => void
- * @param {Function} api.pause - () => void
- * @param {Function} api.resume - () => void
- * @param {Function} api.clear - () => void
- * @param {Function} [api.setVibe] - (name) => void
- * @param {Function} [api.nextVibe] - () => string
- * @param {Function} [api.notify] - (msg) => void
+ * Initialize footer menu interactions (labels + buttons).
+ * @returns {void}
  */
-export function initMenu(footerEl, api) {
-  if (!footerEl) {
-    console.warn("[menu] No footerEl provided to initMenu");
-    return { refresh: () => {} };
-  }
-  const {
-    getState,
-    setGenre, setStyle, cycleStyle,
-    nextGenre, nextStyle,
-    setSpeed, pause, resume, clear,
-    setVibe, nextVibe,
-    notify = () => {},
-  } = api;
+export function initMenu() {
+  // Elements
+  const modeName  = document.getElementById('genreName') || document.getElementById('modeName');
+  const typeName  = document.getElementById('styleName') || document.getElementById('typeName');
+  const themeName = document.getElementById('vibeName')  || document.getElementById('themeName');
 
-  const fireInteraction = () =>
-    window.dispatchEvent(new CustomEvent("ui:interaction"));
+  const modeLabelEl  = modeName?.closest('label')  || modeName;
+  const styleLabelEl = typeName?.closest('label')  || typeName;
+  const themeLabelEl = themeName?.closest('label') || themeName;
 
-  // Footer elements (IDs must exist in footer)
-  const $genre = el(footerEl, "#genreName");
-  const $style = el(footerEl, "#styleName");
-  const $vibe  = el(footerEl, "#vibeName");
+  const speedUpBtn   = document.getElementById('speedUp');
+  const speedDownBtn = document.getElementById('speedDown');
+  const pauseBtn     = document.getElementById('pauseBtn');
+  const clearBtn     = document.getElementById('clearBtn');
 
-  const $speedMinus = el(footerEl, "#btn-speed-minus");
-  const $speedPlus  = el(footerEl, "#btn-speed-plus");
-  const $pause      = el(footerEl, "#btn-pause");
-  const $clear      = el(footerEl, "#btn-clear");
+  const modes = Object.keys(registry);
 
-  const updateLabels = () => {
-    const s = getState();
-    if ($genre) $genre.textContent = s.genre;
-    if ($style) $style.textContent = s.style;
-    if ($vibe  && s.vibe) $vibe.textContent = s.vibe;
-    if ($pause) $pause.textContent = s.paused ? "Resume" : "Pause";
+  // Label updaters (local copies; UI also has its own for keyboard)
+  const setModeLabel = () => {
+    const { familyLabel, typeLabel } = labelsForMode(cfg.persona);
+    if (modeName) modeName.textContent = familyLabel;
+    if (typeName) typeName.textContent = typeLabel;
+  };
+  const setThemeLabel = (name) => {
+    if (themeName) themeName.textContent = name;
   };
 
-  const clampSpeed = (v) => Math.max(0.1, Math.min(10, v));
+  // --- Clickable labels ---
 
-  // Clickable labels — Genre: cycle
-  if ($genre) {
-    $genre.addEventListener("click", () => {
-      fireInteraction();
-      const next = nextGenre?.();
-      if (next) {
-        setGenre(next);
-        notify?.(`Genre → ${next}`);
-        updateLabels();
-      }
-    }, { passive: true });
-  }
+  // Genre/Mode: cycle families (Shift+click = previous)
+  makeClickable(modeLabelEl, (e) => {
+    const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+    const byFamily = familyList.map((fam) => ({
+      family: fam,
+      modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
+    }));
 
-  // Style: prefer a true cycle call (works even without a list)
-  if ($style) {
-    $style.addEventListener("click", () => {
-      fireInteraction();
-      if (typeof cycleStyle === "function") {
-        cycleStyle(+1);              // main.js will emit and update labels
-      } else {
-        const next = nextStyle?.();  // fallback if you still expose a list
-        if (next) setStyle(next);
-      }
-      notify?.(`Style → ${getState().style}`);
-      updateLabels();
-    }, { passive: true });
-  }
+    const currentMode = cfg.persona;
+    const curFam  = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel   || '';
+    const famIdx = Math.max(0, familyList.indexOf(curFam));
 
-  // Vibe is optional
-  if ($vibe) {
-    if (nextVibe && setVibe) {
-      $vibe.addEventListener("click", () => {
-        fireInteraction();
-        const v = nextVibe(+1);
-        if (v) {
-          setVibe(v);
-          notify?.(`Vibe → ${v}`);
-          updateLabels();
-        }
-      }, { passive: true });
+    const dir = e?.shiftKey ? -1 : +1;
+    const nextFamIdx = (famIdx + (dir > 0 ? 1 : familyList.length - 1)) % familyList.length;
+    const nextFamily = byFamily[nextFamIdx];
+    if (!nextFamily || !nextFamily.modes.length) return;
+
+    // Prefer to keep the same type in the next family; fallback to first mode
+    const candidate =
+      nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) ||
+      nextFamily.modes[0];
+
+    setMode(candidate);
+    setModeLabel();
+  });
+
+  // Vibe/Theme: next theme (or cycleTheme fallback)
+  makeClickable(themeLabelEl, () => {
+    if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function') {
+      const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
+      const idx = Math.max(0, themeNames.indexOf(cur));
+      const next = themeNames[(idx + 1) % themeNames.length];
+      setThemeByName(next);
+      setThemeLabel(next);
     } else {
-      $vibe.addEventListener("click", fireInteraction, { passive: true });
+      cycleTheme();
     }
-  }
+  });
 
-  // Speed
-  if ($speedMinus) {
-    $speedMinus.addEventListener("click", () => {
-      fireInteraction();
-      const s = getState();
-      const next = clampSpeed(Number((s.speed - 0.1).toFixed(2)));
-      setSpeed(next);
-      notify?.(`Speed: ${next.toFixed(2)}`);
-    });
-  }
-  if ($speedPlus) {
-    $speedPlus.addEventListener("click", () => {
-      fireInteraction();
-      const s = getState();
-      const next = clampSpeed(Number((s.speed + 0.1).toFixed(2)));
-      setSpeed(next);
-      notify?.(`Speed: ${next.toFixed(2)}`);
-    });
-  }
+  // Style: cycle within current family (Shift+click = previous)
+  makeClickable(styleLabelEl, (e) => {
+    const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+    const byFamily = familyList.map((fam) => ({
+      family: fam,
+      modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
+    }));
 
-  // Pause/Resume
-  if ($pause) {
-    $pause.addEventListener("click", () => {
-      fireInteraction();
-      const s = getState();
-      if (s.paused) { resume(); notify?.("Resumed"); }
-      else { pause(); notify?.("Paused"); }
-      updateLabels();
-    });
+    const currentMode = cfg.persona;
+    const curFam  = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel   || '';
+    const famIdx = Math.max(0, familyList.indexOf(curFam));
+    const typesInFam = Array.from(
+      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
+    );
+    if (!typesInFam.length) return;
+
+    const dir = e?.shiftKey ? -1 : +1;
+    const typeIdx  = Math.max(0, typesInFam.indexOf(curType));
+    const nextType =
+      typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
+
+    const candidate =
+      byFamily[famIdx].modes.find((m) => meta[m]?.typeLabel === nextType) ||
+      byFamily[famIdx].modes[0];
+
+    if (candidate) {
+      setMode(candidate);
+      setModeLabel();
+    }
+  });
+
+  // --- Buttons ---
+  if (speedUpBtn)   speedUpBtn.onclick   = () => incSpeed();
+  if (speedDownBtn) speedDownBtn.onclick = () => decSpeed();
+  if (pauseBtn) {
+    syncPauseButton(); // init label
+    pauseBtn.onclick = () => {
+      togglePause();
+      syncPauseButton();
+    };
   }
+  if (clearBtn) clearBtn.onclick = () => clearAll();
 
-  // Clear
-  if ($clear) {
-    $clear.addEventListener("click", () => {
-      fireInteraction();
-      clear();
-      notify?.("Cleared");
-    });
-  }
-
-  // First paint
-  updateLabels();
-
-  return { refresh: updateLabels };
+  // Initial label paint
+  setModeLabel();
+  // Use rAF to ensure layout is ready; avoids eslint no-undef on setTimeout in some configs
+  window.requestAnimationFrame(setModeLabel);
+  syncPauseButton();
 }
