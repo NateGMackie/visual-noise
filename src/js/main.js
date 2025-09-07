@@ -123,10 +123,9 @@ function run(t) {
   const { initGestures } = gesturesMod;
   const { initNotify } = notifyMod;
 
-// Bridge modules that use window.app.events / window.events (themes.js) to the state bus.
-window.events = { on, off, emit };
-window.app.events = window.events;
-
+  // Bridge modules that use window.app.events / window.events (themes.js) to the state bus.
+  window.events = { on, off, emit };
+  window.app.events = window.events;
 
   // ---------- One toast HUD instance ----------
   initNotify({ bus: { on }, labelsForMode, labelsForGenreStyle, debug: true });

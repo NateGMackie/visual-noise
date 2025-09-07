@@ -2,7 +2,6 @@
 
 import { registry as modeRegistry } from './modes/index.js';
 
-
 // -------------------------
 // Legacy-compatible config
 // -------------------------

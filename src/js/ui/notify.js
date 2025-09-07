@@ -22,12 +22,12 @@
 const NOTIFY = Object.freeze({
   genre: 'notify.genre',
   style: 'notify.style',
-  vibe:  'notify.vibe',
+  vibe: 'notify.vibe',
   speed: 'notify.speed',
   state: 'notify.state',
   power: 'notify.power',
   fireHeight: 'notify.fire.height',
-  fireFuel:   'notify.fire.fuel',
+  fireFuel: 'notify.fire.fuel',
   // Legacy aliases
   system: 'notify.genre',
   program: 'notify.style',
@@ -65,19 +65,19 @@ const DEFAULTS = {
  */
 const CHANNEL_OPTIONS = {
   // Fast sliders: tight window
-  [NOTIFY.speed]:      { coalesce: true, durationMs: 900,  coalesceWindowMs: 500 },
+  [NOTIFY.speed]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
 
   // Fire sliders
-  [NOTIFY.fireHeight]: { coalesce: true, durationMs: 900,  coalesceWindowMs: 500 },
-  [NOTIFY.fireFuel]:   { coalesce: true, durationMs: 900,  coalesceWindowMs: 500 },
+  [NOTIFY.fireHeight]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
+  [NOTIFY.fireFuel]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
 
   // Mode changes
-  [NOTIFY.genre]:      { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
-  [NOTIFY.style]:      { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
-  [NOTIFY.vibe]:       { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
+  [NOTIFY.genre]: { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
+  [NOTIFY.style]: { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
+  [NOTIFY.vibe]: { coalesce: true, durationMs: 1400, coalesceWindowMs: 1200 },
 
   // State changes
-  [NOTIFY.state]:      { coalesce: true, durationMs: 1200, coalesceWindowMs: 1200 },
+  [NOTIFY.state]: { coalesce: true, durationMs: 1200, coalesceWindowMs: 1200 },
 };
 
 // -------------------------
@@ -283,15 +283,24 @@ function _renderToast(channel, title, message, durationMs) {
  */
 function titleForChannel(channel) {
   switch (channel) {
-    case NOTIFY.genre: return 'Genre';
-    case NOTIFY.style: return 'Style';
-    case NOTIFY.vibe:  return 'Vibe';
-    case NOTIFY.speed: return 'Speed';
-    case NOTIFY.state: return 'State';
-    case NOTIFY.power: return 'Power';
-    case NOTIFY.fireHeight: return 'Fire • Height';
-    case NOTIFY.fireFuel:   return 'Fire • Fuel';
-    default: return 'Notice';
+    case NOTIFY.genre:
+      return 'Genre';
+    case NOTIFY.style:
+      return 'Style';
+    case NOTIFY.vibe:
+      return 'Vibe';
+    case NOTIFY.speed:
+      return 'Speed';
+    case NOTIFY.state:
+      return 'State';
+    case NOTIFY.power:
+      return 'Power';
+    case NOTIFY.fireHeight:
+      return 'Fire • Height';
+    case NOTIFY.fireFuel:
+      return 'Fire • Fuel';
+    default:
+      return 'Notice';
   }
 }
 
@@ -312,7 +321,6 @@ function notify(channel, message, opts = {}) {
   const title = opts.title || titleForChannel(channel);
 
   if ((conf.debug ?? DEFAULTS.debug) === true) {
-     
     console.info('[notify]', channel, message, conf);
   }
 
@@ -325,8 +333,8 @@ function notify(channel, message, opts = {}) {
         if (age <= conf.coalesceWindowMs) {
           // inside function notify(...)
 
-const msgEl   = /** @type {DomElement|null} */ (rec.el.querySelector('.vn-msg'));
-const titleEl = /** @type {DomElement|null} */ (rec.el.querySelector('.vn-title'));
+          const msgEl = /** @type {DomElement|null} */ (rec.el.querySelector('.vn-msg'));
+          const titleEl = /** @type {DomElement|null} */ (rec.el.querySelector('.vn-title'));
 
           if (titleEl) titleEl.textContent = title;
           if (msgEl) msgEl.textContent = message;
@@ -396,11 +404,15 @@ function clearChannel(channel) {
  * @returns {void} No return value.
  */
 function initNotify(options = {}) {
-  Object.assign(DEFAULTS, pick(options, ['position', 'debug', 'staggerMs', 'durationMs', 'maxVisible']));
+  Object.assign(
+    DEFAULTS,
+    pick(options, ['position', 'debug', 'staggerMs', 'durationMs', 'maxVisible'])
+  );
 
   _busOn = options?.bus?.on || null;
   _labelsForMode = typeof options?.labelsForMode === 'function' ? options.labelsForMode : null;
-  _labelsForGenreStyle = typeof options?.labelsForGenreStyle === 'function' ? options.labelsForGenreStyle : null;
+  _labelsForGenreStyle =
+    typeof options?.labelsForGenreStyle === 'function' ? options.labelsForGenreStyle : null;
 
   if (_busOn && !_wired) {
     wireBus(_busOn);
@@ -428,13 +440,13 @@ function wireBus(on) {
   };
 
   on('genre', startLabelsFor);
-  on('mode',  startLabelsFor);
+  on('mode', startLabelsFor);
 
-  on('style',  (id) => notify(NOTIFY.style, String(id), { coalesce: true }));
+  on('style', (id) => notify(NOTIFY.style, String(id), { coalesce: true }));
   on('flavor', (id) => notify(NOTIFY.style, String(id), { coalesce: true }));
 
-  on('vibe',  (v) => notify(NOTIFY.vibe,  String(v), { coalesce: true }));
-  on('theme', (v) => notify(NOTIFY.vibe,  String(v), { coalesce: true })); // legacy alias
+  on('vibe', (v) => notify(NOTIFY.vibe, String(v), { coalesce: true }));
+  on('theme', (v) => notify(NOTIFY.vibe, String(v), { coalesce: true })); // legacy alias
 
   on('speed', (s) => {
     const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
@@ -442,8 +454,10 @@ function wireBus(on) {
   });
 
   on('paused', (p) => notify(NOTIFY.state, p ? 'Paused' : 'Resumed', { coalesce: true }));
-  on('clear',  () => notify(NOTIFY.state, 'Cleared', { coalesce: true }));
-  on('power',  (isOn) => notify(NOTIFY.power, `Screen awake: ${isOn ? 'ON' : 'OFF'}`, { coalesce: true }));
+  on('clear', () => notify(NOTIFY.state, 'Cleared', { coalesce: true }));
+  on('power', (isOn) =>
+    notify(NOTIFY.power, `Screen awake: ${isOn ? 'ON' : 'OFF'}`, { coalesce: true })
+  );
 
   // Fire controls (numeric + step)
   on('fire.height', (h) => {
@@ -456,8 +470,11 @@ function wireBus(on) {
     let index, total;
     if (payload && typeof payload === 'object') ({ index, total } = payload);
     else {
-      try { ({ index, total } = JSON.parse(payload)); }
-      catch { /* ignore malformed JSON payloads */ }
+      try {
+        ({ index, total } = JSON.parse(payload));
+      } catch {
+        /* ignore malformed JSON payloads */
+      }
     }
     if (Number.isFinite(index) && Number.isFinite(total)) {
       notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
@@ -465,7 +482,7 @@ function wireBus(on) {
   });
 
   on('fire.fuel', (f) => {
-    const val = (typeof f === 'number' && f.toFixed) ? f.toFixed(0) : String(f);
+    const val = typeof f === 'number' && f.toFixed ? f.toFixed(0) : String(f);
     notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
   });
 
@@ -473,8 +490,11 @@ function wireBus(on) {
     let index, total;
     if (payload && typeof payload === 'object') ({ index, total } = payload);
     else {
-      try { ({ index, total } = JSON.parse(payload)); }
-      catch { /* ignore malformed JSON payloads */ }
+      try {
+        ({ index, total } = JSON.parse(payload));
+      } catch {
+        /* ignore malformed JSON payloads */
+      }
     }
     if (Number.isFinite(index) && Number.isFinite(total)) {
       notify(NOTIFY.fireFuel, `Fuel: ${index}/${total}`, { coalesce: true });
