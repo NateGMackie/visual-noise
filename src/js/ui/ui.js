@@ -12,7 +12,8 @@ import {
 } from '../state.js';
 import { registry } from '../modes/index.js';
 import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
-import { initMenu, syncPauseButton } from './menu.js';
+// NOTE: also import syncAwakeButton so we can refresh the Awake label after hotkey toggle
+import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
 
 // --- ControlsVisibility shim ---
 // Aligns with styles.css (#controls.is-visible + body.has-controls-visible)
@@ -346,6 +347,15 @@ export function initUI() {
     } else if (k === 'c') {
       e.preventDefault();
       clearAll();
+    } else if (k === 'a') {
+      // NEW: Keep Awake toggle via hotkey (delegates to the menu's button)
+      e.preventDefault();
+      const btn = document.getElementById('awakeBtn');
+      if (btn) {
+        btn.click();           // menu handles async enable/disable + notifications + persistence
+        // Immediately refresh the label so it feels instant
+        try { syncAwakeButton?.(); } catch (err) { void err; }
+      }
     }
   });
 
@@ -378,4 +388,3 @@ export function initUI() {
   setModeLabel();
   window.requestAnimationFrame(setModeLabel);
 }
-
