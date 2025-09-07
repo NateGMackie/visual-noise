@@ -9,9 +9,20 @@ import {
   togglePause,
   clearAll,
   labelsForMode,
+  emit,
 } from '../state.js';
 import { registry } from '../modes/index.js';
 import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
+import { WakeLock } from '../lib/wake_lock.js';
+
+// Safe localStorage alias (avoids no-undef and handles privacy modes)
+const LS = (() => {
+  try {
+    return globalThis.localStorage || window.localStorage;
+  } catch {
+    return null;
+  }
+})();
 
 // Small helper (duplicated here so this file is self-contained)
 /**
@@ -37,6 +48,19 @@ function makeClickable(el, onActivate) {
   });
 }
 
+// ---- Keep Awake button sync ----
+/**
+ * Sync the Keep Awake toggle text and aria state with WakeLock.isEnabled().
+ * @returns {void}
+ */
+export function syncAwakeButton() {
+  const btn = document.getElementById('awakeBtn');
+  if (!btn) return;
+  const on = !!WakeLock.isEnabled();
+  btn.textContent = on ? 'Keep Awake: On' : 'Keep Awake: Off';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.title = 'Toggle screen wake lock (A)';
+}
 
 // Exposed so keyboard handler can keep the label in sync.
 /**
@@ -70,6 +94,7 @@ export function initMenu() {
   const speedDownBtn = document.getElementById('speedDown');
   const pauseBtn     = document.getElementById('pauseBtn');
   const clearBtn     = document.getElementById('clearBtn');
+  const awakeBtn     = document.getElementById('awakeBtn');
 
   const modes = Object.keys(registry);
 
@@ -162,6 +187,7 @@ export function initMenu() {
   // --- Buttons ---
   if (speedUpBtn)   speedUpBtn.onclick   = () => incSpeed();
   if (speedDownBtn) speedDownBtn.onclick = () => decSpeed();
+
   if (pauseBtn) {
     syncPauseButton(); // init label
     pauseBtn.onclick = () => {
@@ -169,11 +195,49 @@ export function initMenu() {
       syncPauseButton();
     };
   }
+
   if (clearBtn) clearBtn.onclick = () => clearAll();
+
+  if (awakeBtn) {
+    // Initialize from persisted preference
+    const stored = (LS?.getItem?.('vn.keepAwake') || '').trim();
+    const wantOn = stored === '1' || stored.toLowerCase() === 'true';
+    (async () => {
+      let effective = false;
+      if (wantOn) {
+        effective = (await WakeLock.enable()) === true;
+      }
+      if (!wantOn) WakeLock.disable();
+      LS?.setItem?.('vn.keepAwake', effective ? '1' : '0');
+      emit('power', effective);
+      syncAwakeButton();
+    })();
+
+    // Toggle on click / keyboard
+    awakeBtn.onclick = async () => {
+      const currentlyOn = WakeLock.isEnabled();
+      let next = false;
+      if (currentlyOn) {
+        WakeLock.disable();
+        next = false;
+      } else {
+        next = (await WakeLock.enable()) === true;
+        if (!next) {
+          // If request failed (e.g., unsupported), keep it off
+          WakeLock.disable();
+        }
+      }
+      LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
+      emit('power', next);
+      syncAwakeButton();
+    };
+
+    syncAwakeButton();
+  }
 
   // Initial label paint
   setModeLabel();
-  // Use rAF to ensure layout is ready; avoids eslint no-undef on setTimeout in some configs
   window.requestAnimationFrame(setModeLabel);
   syncPauseButton();
+  syncAwakeButton();
 }
