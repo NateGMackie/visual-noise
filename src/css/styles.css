@@ -219,6 +219,16 @@ body.has-controls-visible {
   gap: 8px;
 }
 
+/* When footer menu is visible, raise bottom-positioned toasts above it */
+body.has-controls-visible .pos-bottom-center,
+body.has-controls-visible .pos-bottom-left,
+body.has-controls-visible .pos-bottom-right {
+  bottom: calc(
+    16px + var(--controls-height, 64px) + var(--controls-safe-pad, 0px)
+  );
+}
+
+
 /* Position modifiers */
 .pos-top-left {
   top: 16px;
