@@ -101,6 +101,7 @@ let _labelsForMode = null;
 let _labelsForGenreStyle = null;
 /** @type {Array<{channel:string,title:string,message:string,durationMs:number}>} */
 let _pending = [];
+let _lastSpeedStepAt = 0;
 
 // -------------------------
 // DOM bootstrapping
@@ -448,10 +449,64 @@ function wireBus(on) {
   on('vibe', (v) => notify(NOTIFY.vibe, String(v), { coalesce: true }));
   on('theme', (v) => notify(NOTIFY.vibe, String(v), { coalesce: true })); // legacy alias
 
-  on('speed', (s) => {
-    const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
-    notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
+// --- SPEED ---
+// Backward-compat: if 'speed' is a number → show multiplier "Speed: 0.7×"
+// If it's an object { index, total } → show "Speed X/N"
+// If a recent 'speed.step' happened, prefer the X/N toast and ignore the numeric one.
+on('speed', (payload) => {
+  // If we just showed X/N within the coalesce window, ignore numeric multiplier updates.
+  const justStepped = now() - _lastSpeedStepAt <= getChannelOpts(NOTIFY.speed).coalesceWindowMs;
+
+  if (payload && typeof payload === 'object') {
+    const { index, total } = payload;
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
+      return;
+    }
+  }
+
+  if (justStepped) return; // keep the X/N toast visible
+
+  const s = payload;
+  const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
+  notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
+});
+
+// Explicit step event (mirrors fire.*.step pattern). Records timing so we can prefer X/N.
+on('speed.step', (payload) => {
+  let index, total;
+  if (payload && typeof payload === 'object') ({ index, total } = payload);
+  else {
+    try {
+      ({ index, total } = JSON.parse(payload));
+    } catch {
+      /* ignore malformed JSON payloads */
+    }
+  }
+  if (Number.isFinite(index) && Number.isFinite(total)) {
+    _lastSpeedStepAt = now();
+    notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
+  }
+});
+// --- /SPEED ---
+
+
+  // New explicit step event (mirrors fire.*.step pattern)
+  on('speed.step', (payload) => {
+    let index, total;
+    if (payload && typeof payload === 'object') ({ index, total } = payload);
+    else {
+      try {
+        ({ index, total } = JSON.parse(payload));
+      } catch {
+        /* ignore malformed JSON payloads */
+      }
+    }
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
+    }
   });
+  // --- /SPEED ---
 
   on('paused', (p) => notify(NOTIFY.state, p ? 'Paused' : 'Resumed', { coalesce: true }));
   on('clear', () => notify(NOTIFY.state, 'Cleared', { coalesce: true }));

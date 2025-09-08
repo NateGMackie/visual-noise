@@ -167,54 +167,54 @@ export const sysadmin = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  /**
-   * Draw one frame and advance the stream based on elapsed time.
-   * @param {any} ctx - Render context ({ ctx2d, dpr, w, h, elapsed, paused, speed }).
-   * @returns {void}
-   */
+  // --- speed mapping (Sysadmin) ---
+function applySpeed(mult) {
+  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+  const midEmit = 140;           // 140ms between lines @ 1.0×
+  emitIntervalMs = Math.max(20, Math.round(midEmit / m));
+}
+
+
   function frame(ctx) {
-    const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
+  const g = ctx.ctx2d;
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
 
-    // background trail
-    const bg = readVar('--bg', '#000') || '#000';
-    g.fillStyle = 'rgba(0,0,0,0.16)';
-    if (bg !== '#000') {
-      // in non-black themes, fade to theme bg for nicer blending
-      // (keep simple — drawing a translucent fill each frame)
-      g.fillStyle = 'rgba(0,0,0,0.16)';
-    }
-    g.fillRect(0, 0, W, H);
+  // NEW: per-mode speed mapping
+  applySpeed(ctx.speed);
 
-    // emission timing (only when running and not paused)
-    if (running && !ctx.paused) {
-      emitAccumulator += ctx.elapsed;
-      while (emitAccumulator >= emitIntervalMs) {
-        emitAccumulator -= emitIntervalMs;
-        push(makeLine());
-      }
-    }
+  // background trail
+  const bg = readVar('--bg', '#000') || '#000';
+  g.fillStyle = 'rgba(0,0,0,0.16)';
+  if (bg !== '#000') g.fillStyle = 'rgba(0,0,0,0.16)';
+  g.fillRect(0, 0, W, H);
 
-    // visible slice
-    const lines = buffer.slice(Math.max(0, buffer.length - rows));
-
-    // text style
-    const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
-    g.textBaseline = 'top';
-    g.fillStyle = fg;
-
-    // draw
-    let y = 4;
-    const xPad = 8;
-    for (let i = 0; i < lines.length; i++) {
-      const txt = lines[i];
-      const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
-      g.fillText(out, xPad, y);
-      y += lineH;
+  // emission timing
+  if (running && !ctx.paused) {
+    emitAccumulator += ctx.elapsed;
+    while (emitAccumulator >= emitIntervalMs) {
+      emitAccumulator -= emitIntervalMs;
+      push(makeLine());
     }
   }
+
+  // visible slice & draw (unchanged)
+  const lines = buffer.slice(Math.max(0, buffer.length - rows));
+  const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+  g.textBaseline = 'top';
+  g.fillStyle = fg;
+
+  let y = 4;
+  const xPad = 8;
+  for (let i = 0; i < lines.length; i++) {
+    const txt = lines[i];
+    const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
+    g.fillText(out, xPad, y);
+    y += lineH;
+  }
+}
+
 
   return { init, resize, start, stop, frame, clear };
 })();

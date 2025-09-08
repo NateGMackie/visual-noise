@@ -159,69 +159,71 @@ export const matrix = (() => {
     if (isHead) g.shadowBlur = 0;
   }
 
-  /**
-   * Render one frame and advance columns when running.
-   * @param {*} ctx - Render context ({ctx2d,dpr,w,h,elapsed,paused,speed}).
-   * @returns {void}
-   */
+  // --- speed mapping (Matrix) ---
+const MIN_MUL = 0.4, MAX_MUL = 1.6;
+const clampMul = (m) => Math.max(MIN_MUL, Math.min(MAX_MUL, Number(m) || 1));
+
+
   function frame(ctx) {
-    const g = ctx.ctx2d;
-    const W = Math.floor(ctx.w / ctx.dpr);
-    const H = Math.floor(ctx.h / ctx.dpr);
+  const g = ctx.ctx2d;
+  const W = Math.floor(ctx.w / ctx.dpr);
+  const H = Math.floor(ctx.h / ctx.dpr);
 
-    // soft fade for trails
-    g.fillStyle = 'rgba(0,0,0,0.18)';
-    g.fillRect(0, 0, W, H);
+  // soft fade for trails
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(0, 0, W, H);
 
-    // ensure font each frame (some canvases drop font on resize)
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    g.textBaseline = 'top';
+  // ensure font each frame
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  g.textBaseline = 'top';
 
-    for (let i = 0; i < cols; i++) {
-      const col = columns[i];
-      const px = i * cellW;
+  // NEW: tuned base at midpoint; clamp global multiplier
+  const mult = clampMul(ctx.speed);
+  const base = 0.3; // 0.3 cells/frame @ speed=1.0 → matches your current feel
 
-      // advance only when running & not paused
-      if (running && !ctx.paused) {
-        const base = 0.3;
-        col.y += col.speed * base * Math.max(0.25, ctx.speed || 1);
-      }
+  for (let i = 0; i < cols; i++) {
+    const col = columns[i];
+    const px = i * cellW;
 
-      const headGridY = Math.floor(col.y);
+    if (running && !ctx.paused) {
+      col.y += col.speed * base * mult;
+    }
 
-      // head
-      {
-        const set = col.charset || pickCharset();
-        const ch = set[(Math.random() * set.length) | 0];
-        const y = headGridY * cellH;
-        if (y > -cellH && y < H + cellH) {
-          drawGlyph(g, ch, px, y, { isHead: true });
-        }
-      }
+    const headGridY = Math.floor(col.y);
 
-      // trail
-      const trailLen = col.trail;
-      for (let t = 1; t <= trailLen; t++) {
-        const gy = headGridY - t;
-        const y = gy * cellH;
-        if (y < -cellH) break;
-        if (y > H) continue;
-
-        const set = col.charset || pickCharset();
-        const ch = set[(Math.random() * set.length) | 0];
-        const alpha = 1 - t / (trailLen + 1);
-        drawGlyph(g, ch, px, y, { isHead: false, alpha });
-      }
-
-      // recycle when below bottom (occasionally, to desync)
-      if (running && !ctx.paused && headGridY * cellH > H && Math.random() > 0.975) {
-        col.y = Math.floor(-Math.random() * rows * 0.5);
-        col.speed = 0.5 + Math.random() * 0.5;
-        col.trail = 6 + Math.floor(Math.random() * 13);
-        col.charset = pickCharset();
+    // head
+    {
+      const set = col.charset || pickCharset();
+      const ch = set[(Math.random() * set.length) | 0];
+      const y = headGridY * cellH;
+      if (y > -cellH && y < H + cellH) {
+        drawGlyph(g, ch, px, y, { isHead: true });
       }
     }
+
+    // trail
+    const trailLen = col.trail;
+    for (let t = 1; t <= trailLen; t++) {
+      const gy = headGridY - t;
+      const y = gy * cellH;
+      if (y < -cellH) break;
+      if (y > H) continue;
+      const set = col.charset || pickCharset();
+      const ch = set[(Math.random() * set.length) | 0];
+      const alpha = 1 - t / (trailLen + 1);
+      drawGlyph(g, ch, px, y, { isHead: false, alpha });
+    }
+
+    // recycle
+    if (running && !ctx.paused && headGridY * cellH > H && Math.random() > 0.975) {
+      col.y = Math.floor(-Math.random() * rows * 0.5);
+      col.speed = 0.5 + Math.random() * 0.5;
+      col.trail = 6 + Math.floor(Math.random() * 13);
+      col.charset = pickCharset();
+    }
   }
+}
+
 
   return { init, resize, start, stop, frame, clear };
 })();

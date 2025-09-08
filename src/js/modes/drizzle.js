@@ -81,44 +81,51 @@ export const drizzle = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  /**
-   * Draw one frame; advance when running and not paused.
-   * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused,speed}
-   * @returns {void}
-   */
+  // --- speed mapping (Drizzle) ---
+function applySpeed(mult) {
+  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+  // Keep 80ms @ 1.0× as midpoint for a breezy drizzle
+  tickMs = Math.max(16, Math.round(80 / m));
+}
+
+
   function frame(ctx) {
-    const g = ctx.ctx2d;
-    tickAcc += ctx.elapsed;
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
+  const g = ctx.ctx2d;
+  tickAcc += ctx.elapsed;
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
 
-    // trail fade
-    g.fillStyle = 'rgba(0,0,0,0.10)';
-    g.fillRect(0, 0, W, H);
+  // NEW: mode-specific speed
+  applySpeed(ctx.speed);
 
-    // draw
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-    g.textBaseline = 'top';
-    g.fillStyle = readVar('--fg', '#03ffaf');
+  // trail fade
+  g.fillStyle = 'rgba(0,0,0,0.10)';
+  g.fillRect(0, 0, W, H);
 
-    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
-    if (doAdvance) tickAcc -= tickMs;
+  // draw
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  g.textBaseline = 'top';
+  g.fillStyle = readVar('--fg', '#03ffaf');
 
-    for (let c = 0; c < cols; c++) {
-      const x = c * fontSize;
-      const y = drops[c] * lineH;
-      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-      g.fillText(ch, x, y);
+  const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+  if (doAdvance) tickAcc -= tickMs;
 
-      if (!doAdvance) continue;
+  for (let c = 0; c < cols; c++) {
+    const x = c * fontSize;
+    const y = drops[c] * lineH;
+    const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+    g.fillText(ch, x, y);
 
-      if (y > H && Math.random() > 0.98) {
-        drops[c] = Math.floor(-rows * Math.random());
-      } else {
-        drops[c] += Math.max(0.25, ctx.speed || 1);
-      }
+    if (!doAdvance) continue;
+
+    if (y > H && Math.random() > 0.98) {
+      drops[c] = Math.floor(-rows * Math.random());
+    } else {
+      drops[c] += 1; // one row per tick, speed via tickMs
     }
   }
+}
+
 
   return { info, init, resize, start, stop, frame, clear };
 })();

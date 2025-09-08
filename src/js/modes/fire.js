@@ -150,6 +150,17 @@ export const fire = (() => {
   const dtTarget = 1000 / TARGET_FPS;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
+  // Map global speed multiplier (≈0.4..1.6) to our fixed-step interval.
+let stepMs = dtTarget;
+function applySpeed(ctx) {
+  const mult = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
+  // Keep midpoint "just right": at 1.0× → stepMs === dtTarget (30 FPS feel)
+  // Faster → smaller step; Slower → larger step. Clamp to avoid runaway loops.
+  const MIN_STEP = 1000 / 90; // don't simulate faster than ~90 steps/sec
+  stepMs = Math.max(MIN_STEP, Math.round(dtTarget / mult));
+}
+
+
   // Utils
 
   /**
@@ -316,75 +327,72 @@ export const fire = (() => {
     }
   }
 
-  // ----- Frame -----
-  /**
-   * Draw one frame and advance simulation on fixed timestep.
-   * @param {*} ctx - Render context with {ctx2d,dpr,w,h,elapsed,paused}.
-   * @returns {void}
-   */
-  function frame(ctx) {
-    const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
+function frame(ctx) {
+  const g = ctx.ctx2d;
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
 
-    // Background
-    g.fillStyle = BG;
-    g.fillRect(0, 0, W, H);
+  // Background
+  g.fillStyle = BG;
+  g.fillRect(0, 0, W, H);
 
-    // Fixed-step sim
-    const now = nowMs();
-    let dt = now - lastT;
-    if (dt > 250) dt = 250; // cap to avoid large jumps
-    lastT = now;
-    acc += dt;
-    while (running && !ctx.paused && acc >= dtTarget) {
-      stepSim();
-      acc -= dtTarget;
-    }
+  // --- NEW: apply global speed multiplier to our fixed-step interval
+  applySpeed(ctx);
 
-    // Draw cells as ASCII
-    const cellW = Math.ceil(W / Wc);
-    const cellH = Math.ceil(H / Hc);
-    const fontPx = Math.max(10, cellH);
-    g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-    g.textBaseline = 'top';
-    g.globalCompositeOperation = 'source-over';
+  // Fixed-step sim (scaled by speed)
+  const now = nowMs();
+  let dt = now - lastT;
+  if (dt > 250) dt = 250; // cap to avoid large jumps
+  lastT = now;
+  acc += dt;
+  while (running && !ctx.paused && acc >= stepMs) {
+    stepSim();
+    acc -= stepMs;
+  }
 
-    for (let y = 0; y < Hc; y++) {
-      const yPix = y * cellH;
-      let lastFill = -1;
-      let glowing = false;
+  // Draw cells as ASCII
+  const cellW = Math.ceil(W / Wc);
+  const cellH = Math.ceil(H / Hc);
+  const fontPx = Math.max(10, cellH);
+  g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  g.textBaseline = 'top';
+  g.globalCompositeOperation = 'source-over';
 
-      for (let x = 0; x < Wc; x++) {
-        const v = heat[y * Wc + x];
-        if (!v) continue;
+  for (let y = 0; y < Hc; y++) {
+    const yPix = y * cellH;
+    let lastFill = -1;
+    let glowing = false;
 
-        const shade = SHADES[Math.min(SHADES.length - 1, ((v * SHADES.length) / PALETTE_SIZE) | 0)];
-        if (v !== lastFill) {
-          g.fillStyle = PAL[v];
-          lastFill = v;
-        }
+    for (let x = 0; x < Wc; x++) {
+      const v = heat[y * Wc + x];
+      if (!v) continue;
 
-        const needsGlow = v > PALETTE_SIZE * 0.8;
-        if (needsGlow !== glowing) {
-          if (needsGlow) {
-            g.shadowColor = PAL[Math.min(PALETTE_SIZE - 1, v + 2)];
-            g.shadowBlur = Math.min(MAX_GLOW, 2 + (((v / PALETTE_SIZE) * MAX_GLOW) | 0));
-          } else {
-            g.shadowBlur = 0;
-            g.shadowColor = 'transparent';
-          }
-          glowing = needsGlow;
-        }
-
-        g.fillText(shade, x * cellW, yPix);
+      const shade = SHADES[Math.min(SHADES.length - 1, ((v * SHADES.length) / PALETTE_SIZE) | 0)];
+      if (v !== lastFill) {
+        g.fillStyle = PAL[v];
+        lastFill = v;
       }
 
-      // reset per row
-      g.shadowBlur = 0;
-      g.shadowColor = 'transparent';
+      const needsGlow = v > PALETTE_SIZE * 0.8;
+      if (needsGlow !== glowing) {
+        if (needsGlow) {
+          g.shadowColor = PAL[Math.min(PALETTE_SIZE - 1, v + 2)];
+          g.shadowBlur = Math.min(MAX_GLOW, 2 + (((v / PALETTE_SIZE) * MAX_GLOW) | 0));
+        } else {
+          g.shadowBlur = 0;
+          g.shadowColor = 'transparent';
+        }
+        glowing = needsGlow;
+      }
+
+      g.fillText(shade, x * cellW, yPix);
     }
+
+    // reset per row
+    g.shadowBlur = 0;
+    g.shadowColor = 'transparent';
   }
+}
 
   return { init, resize, start, stop, frame, clear };
 })();

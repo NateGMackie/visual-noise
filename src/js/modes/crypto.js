@@ -142,6 +142,14 @@ export const crypto = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
+  // --- speed mapping (Crypto) ---
+function applySpeed(mult) {
+  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+  const midEmit = 150;           // 150ms @ 1.0× feels right for crypto chatter
+  emitIntervalMs = Math.max(20, Math.round(midEmit / m));
+}
+
+
   /**
    * Draw one frame and optionally emit new lines on cadence.
    * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused}

@@ -202,47 +202,35 @@ export const rain_bsd = (() => {
     if (ctx && ctx.ctx2d) ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  /**
-   * Draw one frame and step the simulation when running.
-   * @param {*} ctx - Render context ({ w, h, dpr, elapsed, paused, speed }).
-   * @returns {void}
-   */
   function frame(ctx) {
-    if (!g) return;
+  if (!g) return;
 
-    // 🔄 pick up vibe changes live
-    updatePaletteFromCss();
+  // 🔄 pick up vibe changes live
+  updatePaletteFromCss();
 
-    // Advance time → discrete splash step(s)
-    const speed = clamp(Number.isFinite(ctx.speed) ? ctx.speed : 1, 0.25, 4);
-    const stepMs = stepBaseMs / speed;
+  // GLOBAL range 0.4..1.6; align with other modes
+  const m = Math.max(0.4, Math.min(1.6, Number(ctx.speed) || 1));
+  const stepMs = stepBaseMs / m;
 
-    let dt = typeof ctx.elapsed === 'number' ? ctx.elapsed : 16.7;
-    tickAccMs += dt;
+  let dt = typeof ctx.elapsed === 'number' ? ctx.elapsed : 16.7;
+  tickAccMs += dt;
 
-    // Only advance animation if running & not paused
-    const shouldAdvance = running && !ctx.paused;
-    if (shouldAdvance) {
-      while (tickAccMs >= stepMs) {
-        tickAccMs -= stepMs;
-        tickOnce();
-      }
+  const shouldAdvance = running && !ctx.paused;
+  if (shouldAdvance) {
+    while (tickAccMs >= stepMs) {
+      tickAccMs -= stepMs;
+      tickOnce();
     }
-
-    // Draw full frame (classic BSD rain doesn't use trails)
-    const W = (ctx.w || canvas.width) / dpr;
-    const H = (ctx.h || canvas.height) / dpr;
-
-    g.fillStyle = bg;
-    g.fillRect(0, 0, W, H);
-
-    g.fillStyle = fg;
-    // font & baseline were set in metrics(); ensure still correct
-    g.font = `${Math.round(charH / 1.25)}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
-    g.textBaseline = 'top';
-
-    for (const e of entries) drawStage(e.x, e.y, e.stage);
   }
+
+  // draw (unchanged)
+  const W = (ctx.w || canvas.width) / dpr;
+  const H = (ctx.h || canvas.height) / dpr;
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+  drawAllEntries();
+}
+
 
   // --- internals -----------------------------------------------------------
   /**

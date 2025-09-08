@@ -236,87 +236,70 @@ export const mining = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  /**
-   * Draw one frame; advances typing/stream cadence when running.
-   * @param {*} ctx - Render context ({ ctx2d, dpr, w, h, elapsed, paused }).
-   * @returns {void}
-   */
+  // --- speed mapping (Mining) ---
+function applySpeed(mult) {
+  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+  // 150ms between lines @ 1.0×; 26ms per typed char @ 1.0×
+  emitIntervalMs = Math.max(30, Math.round(150 / m));
+  typeSpeedMs   = Math.max(8,  Math.round(26  / m));
+}
+
+
   function frame(ctx) {
-    const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
+  const g = ctx.ctx2d;
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
 
-    // soft fade to create trail
-    g.fillStyle = 'rgba(0,0,0,0.18)';
-    g.fillRect(0, 0, W, H);
+  // NEW: per-mode speed mapping
+  applySpeed(ctx.speed);
 
-    // emission logic
-    if (running && !ctx.paused) {
-      // if currently typing a line, advance characters based on elapsed
-      if (partialLine) {
-        typeAccumulator += ctx.elapsed;
-        while (typeAccumulator >= typeSpeedMs && partialLine) {
-          typeAccumulator -= typeSpeedMs;
-          partialIdx++;
-          if (partialIdx >= partialLine.length) {
-            // finalize the full line into buffer
-            push(partialLine);
-            partialLine = null;
-            partialIdx = 0;
-          }
-        }
-      } else {
-        // chance to start a new typed line or emit a full line
-        emitAccumulator += ctx.elapsed;
-        while (emitAccumulator >= emitIntervalMs && !partialLine) {
-          emitAccumulator -= emitIntervalMs;
-          if (Math.random() < typingChance) {
-            partialLine = makeLine();
-            partialIdx = 0;
-            typeAccumulator = 0;
-          } else {
-            push(makeLine());
-          }
+  // soft fade
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(0, 0, W, H);
+
+  if (running && !ctx.paused) {
+    if (partialLine) {
+      typeAccumulator += ctx.elapsed;
+      while (typeAccumulator >= typeSpeedMs && partialLine) {
+        typeAccumulator -= typeSpeedMs;
+        partialIdx++;
+        if (partialIdx >= partialLine.length) {
+          push(partialLine);
+          partialLine = null;
+          partialIdx = 0;
         }
       }
-    }
-
-    // compute visible lines (tail -n rows), also include a composed line with cursor if typing
-    let lines = buffer.slice(Math.max(0, buffer.length - rows));
-    let typingPreview = null;
-    if (partialLine) {
-      typingPreview = partialLine.slice(0, Math.min(partialIdx, cols - 1));
-      // reserve last row for typing preview
-      if (lines.length >= rows) lines = lines.slice(1);
-    }
-
-    // draw text
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-    g.textBaseline = 'top';
-    const fg = readVar('--fg', '#9fffb3').trim();
-    g.fillStyle = fg || '#9fffb3';
-
-    let y = 4;
-    const xPad = 8;
-    for (let i = 0; i < lines.length; i++) {
-      const txt = lines[i];
-      const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
-      g.fillText(out, xPad, y);
-      y += lineH;
-    }
-
-    // draw typing line with blinking cursor
-    cursorBlinkMs = (cursorBlinkMs + ctx.elapsed) % 1000;
-    if (typingPreview !== null) {
-      const withCursor = cursorBlinkMs < 520 ? typingPreview + ' ▋' : typingPreview;
-      g.fillText(withCursor, xPad, y);
     } else {
-      // idle cursor at the end
-      if (cursorBlinkMs < 520) {
-        g.fillText('▍', xPad, y);
+      emitAccumulator += ctx.elapsed;
+      while (emitAccumulator >= emitIntervalMs && !partialLine) {
+        emitAccumulator -= emitIntervalMs;
+        if (Math.random() < typingChance) {
+          partialLine = makeLine();
+          partialIdx = 0;
+        } else {
+          push(makeLine());
+        }
       }
     }
   }
+
+  // draw buffer (unchanged)
+  const lines = buffer.slice(Math.max(0, buffer.length - rows));
+  const fg = readVar('--fg', '#03ffaf');
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  g.textBaseline = 'top';
+  g.fillStyle = (fg || '#03ffaf').trim();
+
+  let y = 4;
+  const xPad = 8;
+  for (let i = 0; i < lines.length; i++) {
+    const txt = lines[i];
+    const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
+    g.fillText(out, xPad, y);
+    y += lineH;
+  }
+}
+
 
   return { init, resize, start, stop, frame, clear };
 })();

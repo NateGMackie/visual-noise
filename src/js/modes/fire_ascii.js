@@ -124,21 +124,22 @@ export const fireAscii = (() => {
     g.restore();
   }
 
-  /**
-   * Update ember/cooling based on ctx.speed.
-   * Accepts number or object with {index|idx|value}.
-   * @param {*} ctx - Render context containing a "speed" value (number or object).
-   * @returns {void}
-   */
   function applySpeed(ctx) {
-    let idx = 6;
-    const s = ctx.speed;
-    if (typeof s === 'number') idx = s;
-    else if (s && typeof s === 'object') idx = s.index ?? s.idx ?? s.value ?? 6;
-    const p = speedModel.map(idx);
-    emberChance = p.emberChance;
-    coolBase = p.coolBase;
-  }
+  // Global multiplier 0.4..1.6; normalize to 0..1
+  const m = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
+  const t = (m - 0.4) / (1.6 - 0.4); // 0..1
+
+  // Rebuild emberChance/cooling from multiplier so 1.0× is your "just right"
+  // These ranges match the feel of your old index mapping:
+  // emberChance: 0.25 → 0.60 across the range
+  // coolBase   : 0.70 → 1.20 across the range
+  const emberMin = 0.25, emberMax = 0.60;
+  const coolMin  = 0.70, coolMax  = 1.20;
+
+  emberChance = emberMin + t * (emberMax - emberMin);
+  coolBase    = coolMin  + t * (coolMax  - coolMin);
+}
+
 
   /**
    * Draw one frame and advance simulation when running.
