@@ -78,7 +78,7 @@ import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
 
   const show = () => {
     if (el) {
-      setInert(el, false);              // re-enable interaction first
+      setInert(el, false); // re-enable interaction first
       el.classList.add(EL_ON);
       // aria-hidden already cleared above; keep explicit for clarity
       el.removeAttribute('aria-hidden');
@@ -91,9 +91,9 @@ import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
   const hide = () => {
     clearTimer();
     if (el) {
-      moveFocusOutOf(el);               // IMPORTANT: move focus before hiding
+      moveFocusOutOf(el); // IMPORTANT: move focus before hiding
       el.classList.remove(EL_ON);
-      setInert(el, true);               // disables focus + interaction while hidden
+      setInert(el, true); // disables focus + interaction while hidden
     }
     body.classList.remove(BODY_ON);
   };
@@ -144,20 +144,19 @@ import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
   window.addEventListener('ui:controls:toggle', toggle, { capture: true });
 })();
 
-
 /**
  * Initialize UI controls, HUD labels, and wire basic interactions.
  * @returns {void}
  */
 export function initUI() {
   // Optional legacy buttons (still supported)
-  const modeBtn  = document.getElementById('modeBtn');
+  const modeBtn = document.getElementById('modeBtn');
   const themeBtn = document.getElementById('themeBtn');
 
   // Prefer new IDs, fall back to legacy for one release
-  const modeName  = document.getElementById('genreName') || document.getElementById('modeName');
-  const typeName  = document.getElementById('styleName') || document.getElementById('typeName');
-  const themeName = document.getElementById('vibeName')  || document.getElementById('themeName');
+  const modeName = document.getElementById('genreName') || document.getElementById('modeName');
+  const typeName = document.getElementById('styleName') || document.getElementById('typeName');
+  const themeName = document.getElementById('vibeName') || document.getElementById('themeName');
 
   const fullBtn = document.getElementById('fullBtn');
 
@@ -352,9 +351,13 @@ export function initUI() {
       e.preventDefault();
       const btn = document.getElementById('awakeBtn');
       if (btn) {
-        btn.click();           // menu handles async enable/disable + notifications + persistence
+        btn.click(); // menu handles async enable/disable + notifications + persistence
         // Immediately refresh the label so it feels instant
-        try { syncAwakeButton?.(); } catch (err) { void err; }
+        try {
+          syncAwakeButton?.();
+        } catch (err) {
+          void err;
+        }
       }
     }
   });

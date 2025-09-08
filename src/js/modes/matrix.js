@@ -159,9 +159,21 @@ export const matrix = (() => {
     if (isHead) g.shadowBlur = 0;
   }
 
+  // --- speed mapping (Matrix) ---
+  const MIN_MUL = 0.4,
+    MAX_MUL = 1.6;
+  const clampMul = (m) => Math.max(MIN_MUL, Math.min(MAX_MUL, Number(m) || 1));
+
   /**
-   * Render one frame and advance columns when running.
-   * @param {*} ctx - Render context ({ctx2d,dpr,w,h,elapsed,paused,speed}).
+   * Render one frame of Matrix rain: fade the background, advance column heads
+   * according to the global speed multiplier, and draw head/trail glyphs.
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
+   * @returns {void}
+   */
+  /**
+   * Render one frame of Matrix rain: fade the background, advance column heads
+   * according to the global speed multiplier, and draw head/trail glyphs.
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
    * @returns {void}
    */
   function frame(ctx) {
@@ -173,18 +185,20 @@ export const matrix = (() => {
     g.fillStyle = 'rgba(0,0,0,0.18)';
     g.fillRect(0, 0, W, H);
 
-    // ensure font each frame (some canvases drop font on resize)
+    // ensure font each frame
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     g.textBaseline = 'top';
+
+    // NEW: tuned base at midpoint; clamp global multiplier
+    const mult = clampMul(ctx.speed);
+    const base = 0.3; // 0.3 cells/frame @ speed=1.0 → matches your current feel
 
     for (let i = 0; i < cols; i++) {
       const col = columns[i];
       const px = i * cellW;
 
-      // advance only when running & not paused
       if (running && !ctx.paused) {
-        const base = 0.3;
-        col.y += col.speed * base * Math.max(0.25, ctx.speed || 1);
+        col.y += col.speed * base * mult;
       }
 
       const headGridY = Math.floor(col.y);
@@ -206,14 +220,13 @@ export const matrix = (() => {
         const y = gy * cellH;
         if (y < -cellH) break;
         if (y > H) continue;
-
         const set = col.charset || pickCharset();
         const ch = set[(Math.random() * set.length) | 0];
         const alpha = 1 - t / (trailLen + 1);
         drawGlyph(g, ch, px, y, { isHead: false, alpha });
       }
 
-      // recycle when below bottom (occasionally, to desync)
+      // recycle
       if (running && !ctx.paused && headGridY * cellH > H && Math.random() > 0.975) {
         col.y = Math.floor(-Math.random() * rows * 0.5);
         col.speed = 0.5 + Math.random() * 0.5;

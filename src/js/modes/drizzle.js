@@ -81,9 +81,23 @@ export const drizzle = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
+  // --- speed mapping (Drizzle) ---
   /**
-   * Draw one frame; advance when running and not paused.
-   * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused,speed}
+   * Update the drizzle tick cadence from the global speed multiplier.
+   * 1.0× keeps ~80ms between row steps; higher = faster (smaller tickMs).
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+    // Keep 80ms @ 1.0× as midpoint for a breezy drizzle
+    tickMs = Math.max(16, Math.round(80 / m));
+  }
+
+  /**
+   * Render one frame of drizzle: fade the trail, advance drops on cadence,
+   * and draw sparse glyphs. Speed is applied via tickMs (rows per tick).
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
    * @returns {void}
    */
   function frame(ctx) {
@@ -91,6 +105,9 @@ export const drizzle = (() => {
     tickAcc += ctx.elapsed;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
+
+    // NEW: mode-specific speed
+    applySpeed(ctx.speed);
 
     // trail fade
     g.fillStyle = 'rgba(0,0,0,0.10)';
@@ -115,7 +132,7 @@ export const drizzle = (() => {
       if (y > H && Math.random() > 0.98) {
         drops[c] = Math.floor(-rows * Math.random());
       } else {
-        drops[c] += Math.max(0.25, ctx.speed || 1);
+        drops[c] += 1; // one row per tick, speed via tickMs
       }
     }
   }

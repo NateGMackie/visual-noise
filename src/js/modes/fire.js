@@ -150,6 +150,22 @@ export const fire = (() => {
   const dtTarget = 1000 / TARGET_FPS;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
+  // Map global speed multiplier (≈0.4..1.6) to our fixed-step interval.
+  let stepMs = dtTarget;
+  /**
+   * Update the simulation step interval from the global speed multiplier.
+   * Higher speed → smaller step (faster sim); lower speed → larger step.
+   * @param {*} ctx - Render context containing the `speed` multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(ctx) {
+    const mult = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
+    // Keep midpoint "just right": at 1.0× → stepMs === dtTarget (30 FPS feel)
+    // Faster → smaller step; Slower → larger step. Clamp to avoid runaway loops.
+    const MIN_STEP = 1000 / 90; // don't simulate faster than ~90 steps/sec
+    stepMs = Math.max(MIN_STEP, Math.round(dtTarget / mult));
+  }
+
   // Utils
 
   /**
@@ -316,10 +332,10 @@ export const fire = (() => {
     }
   }
 
-  // ----- Frame -----
   /**
-   * Draw one frame and advance simulation on fixed timestep.
-   * @param {*} ctx - Render context with {ctx2d,dpr,w,h,elapsed,paused}.
+   * Draw one frame of ASCII fire, advancing the simulation at a fixed step
+   * scaled by the global speed multiplier, then rendering the heat as glyphs.
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, paused, speed }).
    * @returns {void}
    */
   function frame(ctx) {
@@ -331,15 +347,18 @@ export const fire = (() => {
     g.fillStyle = BG;
     g.fillRect(0, 0, W, H);
 
-    // Fixed-step sim
+    // --- NEW: apply global speed multiplier to our fixed-step interval
+    applySpeed(ctx);
+
+    // Fixed-step sim (scaled by speed)
     const now = nowMs();
     let dt = now - lastT;
     if (dt > 250) dt = 250; // cap to avoid large jumps
     lastT = now;
     acc += dt;
-    while (running && !ctx.paused && acc >= dtTarget) {
+    while (running && !ctx.paused && acc >= stepMs) {
       stepSim();
-      acc -= dtTarget;
+      acc -= stepMs;
     }
 
     // Draw cells as ASCII

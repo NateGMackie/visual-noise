@@ -4,6 +4,23 @@
 import { randInt } from '../lib/index.js';
 
 /**
+ * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
+ * @typedef {*} CanvasRenderingContext2D
+ */
+/**
+ * Render context passed to mode functions each frame.
+ * @typedef {object} VNRenderContext
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
+ * @property {number} w - Canvas width in CSS pixels.
+ * @property {number} h - Canvas height in CSS pixels.
+ * @property {number} dpr - Device pixel ratio.
+ * @property {number} elapsed - Milliseconds since the last frame.
+ * @property {boolean} paused - Whether the animation is paused.
+ * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ */
+
+/**
  * Sysadmin console: emits status lines (CPU/MEM/NET/DISK) with light trail.
  * Exports the standard mode API: init, resize, start, stop, frame, clear.
  */
@@ -168,8 +185,21 @@ export const sysadmin = (() => {
   }
 
   /**
-   * Draw one frame and advance the stream based on elapsed time.
-   * @param {any} ctx - Render context ({ ctx2d, dpr, w, h, elapsed, paused, speed }).
+   * Update the line-emission cadence based on the global speed multiplier.
+   * Keeps 1.0× at ~140ms between lines; higher multipliers emit faster.
+   * @param {number} mult - Global speed multiplier (≈ 0.4–1.6).
+   * @returns {void} No return value.
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+    const midEmit = 140; // 140ms between lines @ 1.0×
+    emitIntervalMs = Math.max(20, Math.round(midEmit / m));
+  }
+
+  /**
+   * Render one frame and, if running, emit new lines based on cadence.
+   * Applies per-mode speed mapping using the local helper applySpeed().
+   * @param {VNRenderContext} ctx - Render context for this frame.
    * @returns {void}
    */
   function frame(ctx) {
@@ -177,17 +207,16 @@ export const sysadmin = (() => {
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
+    // per-mode speed mapping
+    applySpeed(ctx.speed);
+
     // background trail
     const bg = readVar('--bg', '#000') || '#000';
     g.fillStyle = 'rgba(0,0,0,0.16)';
-    if (bg !== '#000') {
-      // in non-black themes, fade to theme bg for nicer blending
-      // (keep simple — drawing a translucent fill each frame)
-      g.fillStyle = 'rgba(0,0,0,0.16)';
-    }
+    if (bg !== '#000') g.fillStyle = 'rgba(0,0,0,0.16)';
     g.fillRect(0, 0, W, H);
 
-    // emission timing (only when running and not paused)
+    // emission timing
     if (running && !ctx.paused) {
       emitAccumulator += ctx.elapsed;
       while (emitAccumulator >= emitIntervalMs) {
@@ -196,16 +225,13 @@ export const sysadmin = (() => {
       }
     }
 
-    // visible slice
+    // visible slice & draw
     const lines = buffer.slice(Math.max(0, buffer.length - rows));
-
-    // text style
     const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
     g.textBaseline = 'top';
     g.fillStyle = fg;
 
-    // draw
     let y = 4;
     const xPad = 8;
     for (let i = 0; i < lines.length; i++) {

@@ -1,6 +1,7 @@
 // src/js/state.js
 
 import { registry as modeRegistry } from './modes/index.js';
+import { DEFAULT_SPEED_MODEL } from './lib/speed.js';
 
 // -------------------------
 // Legacy-compatible config
@@ -9,7 +10,7 @@ export const cfg = {
   persona: 'crypto', // legacy "current mode" name (still honored)
   theme: 'classic',
   dock: 'bottom',
-  speed: 0.7, // 1x default render speed
+  speed: 0.7, // legacy multiplier; we will keep this coherent with active.speed index
   paused: false, // running by default
 };
 
@@ -62,7 +63,7 @@ export const registry = {
           name: 'crypto',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'crypto',
         },
@@ -70,7 +71,7 @@ export const registry = {
           name: 'sysadmin',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'sysadmin',
         },
@@ -85,7 +86,7 @@ export const registry = {
           name: 'mining',
           flavorsOrder: ['classic'],
           flavors: {
-            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 9, step: 1 },
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
           },
           impl: 'mining',
         },
@@ -162,6 +163,8 @@ export const active = {
   modeId: 'crypto',
   flavorId: 'classic',
   themeId: cfg.theme,
+  // IMPORTANT: we keep this as an INDEX on a 1..steps scale (human-friendly).
+  // cfg.speed remains the derived multiplier for legacy code.
   speed: null, // null means "use flavor's default on init"
 };
 
@@ -179,7 +182,7 @@ export function fullId(a = active) {
 /**
  * Resolve the registry nodes for a given selection path.
  * @param {{familyId:string,modeId:string,flavorId:string}} [path] - Selection path to resolve.
- * @returns {{fam?:any, mode?:any, flav?:any}} Family, mode, and flavor objects if found.
+ * @returns {{ fam?:any, mode?:any, flav?:any }} Family, mode, and flavor objects if found.
  */
 export function getNode(path = active) {
   const fam = registry.families[path.familyId];
@@ -189,12 +192,33 @@ export function getNode(path = active) {
 }
 
 /**
+ * Compute the speed multiplier from the current index using the shared DEFAULT_SPEED_MODEL.
+ * We normalize the index 1..steps to the default model's 0..(steps-1) curve.
+ * @param {number} idx1based - Index in [min..max] (usually 1..10).
+ * @param {number} steps - Total number of steps for this flavor.
+ * @returns {number} multiplier suitable for animation timing.
+ */
+function indexToMultiplier(idx1based, steps) {
+  const zeroBased = Math.max(1, Math.min(steps, Math.round(idx1based))) - 1; // 0..steps-1
+  // Remap zeroBased 0..(steps-1) onto DEFAULT_SPEED_MODEL domain (0..9)
+  const t = steps > 1 ? zeroBased / (steps - 1) : 0;
+  const defSteps = DEFAULT_SPEED_MODEL.steps; // 10
+  const approxDefIdx = Math.round(t * (defSteps - 1));
+  return DEFAULT_SPEED_MODEL.map(approxDefIdx);
+}
+
+/**
  * Initialize missing values (e.g., speed from flavor defaults).
+ * Also keeps cfg.speed (multiplier) coherent with the chosen index.
  * @returns {void}
  */
 export function initDefaults() {
   const { flav } = getNode();
-  if (active.speed == null && flav) active.speed = flav.defaultSpeed ?? 5;
+  if (flav) {
+    if (active.speed == null) active.speed = flav.defaultSpeed ?? 5;
+    const steps = Math.max(1, Number(flav?.maxSpeed ?? 10));
+    cfg.speed = indexToMultiplier(active.speed, steps);
+  }
 }
 
 // Move pointers while staying valid
@@ -292,34 +316,81 @@ export function jumpFlavorByIndex(idx1based) {
 
 /**
  * Return the current speed bounds for the active flavor.
+ * (Still provided for callers that want min/max/step; this is the index scale.)
  * @returns {{min:number,max:number,step:number}} Bounds and step size.
  */
 export function speedBounds() {
   const { flav } = getNode();
-  return { min: flav?.minSpeed ?? 1, max: flav?.maxSpeed ?? 9, step: flav?.step ?? 1 };
+  return { min: flav?.minSpeed ?? 1, max: flav?.maxSpeed ?? 10, step: flav?.step ?? 1 };
 }
 
 /**
- * Set the current speed, clamped to the active flavor's bounds.
- * Emits "speed" and mirrors the value to legacy {@link cfg.speed}.
- * @param {number} next - Target speed value.
+ * Set the current speed by INDEX (human 1..steps), clamped to bounds.
+ * Mirrors the computed multiplier to legacy {@link cfg.speed} and emits "speed".
+ * @param {number} next - Target speed index (e.g., 6 for “6/10”).
  * @returns {void}
  */
 export function setSpeed(next) {
   const { min, max } = speedBounds();
-  active.speed = Math.max(min, Math.min(max, next));
-  cfg.speed = active.speed; // keep legacy field coherent
+  const clampedIndex = Math.max(min, Math.min(max, Math.round(Number(next))));
+  active.speed = clampedIndex;
+
+  // Keep legacy multiplier coherent
+  const steps = Math.max(1, Number(max));
+  cfg.speed = indexToMultiplier(clampedIndex, steps);
+  // Also emit an index-style event for X/N UI toasts
+  emit('speed.step', { index: active.speed, total: speedBounds().max });
+
+  // Emit the multiplier (legacy behavior), but callers can read the label via getSpeedLabel()
   emit('speed', cfg.speed);
 }
 
 /**
- * Increment/decrement speed by one step multiple.
+ * Increment/decrement speed by one index step (ignores multiplier semantics).
  * @param {number} delta - Positive to increase, negative to decrease.
  * @returns {void}
  */
 export function stepSpeed(delta) {
   const { step } = speedBounds();
   setSpeed((active.speed ?? 5) + Math.sign(delta) * step);
+}
+
+/**
+ * Human-friendly "X/N" label for the active speed index.
+ * @returns {string} A display label like "6/10" reflecting the current index and total steps.
+ */
+export function getSpeedLabel() {
+  const { max } = speedBounds();
+  const idx = Math.min(Math.max(1, active.speed ?? 5), max);
+  return `${idx}/${max}`;
+}
+
+/**
+ * Read the current speed multiplier (what render loops should use).
+ * @returns {number} The global speed multiplier derived from the index (≈0.4–1.6).
+ */
+export function getSpeedMultiplier() {
+  return cfg.speed;
+}
+
+/**
+ * Multiply current speed by a factor (legacy shape).
+ * NOW reinterpreted as “step by 1” to line up with hotkeys/UI.
+ * @param {number} [_f] - Ignored; kept for signature compatibility.
+ * @returns {void}
+ */
+export function incSpeed(_f = 1.2) {
+  stepSpeed(1);
+}
+
+/**
+ * Divide current speed by a factor (legacy shape).
+ * NOW reinterpreted as “step by -1” to line up with hotkeys/UI.
+ * @param {number} [_f] - Ignored; kept for signature compatibility.
+ * @returns {void}
+ */
+export function decSpeed(_f = 1 / 1.2) {
+  stepSpeed(-1);
 }
 
 /**
@@ -443,24 +514,6 @@ export function labelsForMode(id) {
 export function labelsForGenreStyle(name) {
   const { familyLabel, typeLabel } = labelsForMode(name);
   return { genreLabel: familyLabel, styleLabel: typeLabel };
-}
-
-/**
- * Multiply current speed by a factor (e.g., 1.2 to speed up ~20%).
- * @param {number} [f] - Factor to multiply speed by.
- * @returns {void}
- */
-export function incSpeed(f = 1.2) {
-  setSpeed((active.speed ?? cfg.speed) * f);
-}
-
-/**
- * Divide current speed by a factor (e.g., 1.2 to slow down ~17%).
- * @param {number} [f] - Factor to divide speed by.
- * @returns {void}
- */
-export function decSpeed(f = 1 / 1.2) {
-  setSpeed((active.speed ?? cfg.speed) * f);
 }
 
 /**

@@ -75,6 +75,19 @@ export const digitalrain = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
+  // --- speed mapping (DigitalRain) ---
+  /**
+   * Update the stream tick cadence from the global speed multiplier.
+   * 1.0× keeps ~75ms between row steps; higher = faster (smaller tickMs).
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1)); // global 0.4–1.6
+    // Keep 75ms @ 1.0× as the midpoint; faster multipliers reduce the delay
+    tickMs = Math.max(16, Math.round(75 / m));
+  }
+
   /**
    * Draw one frame; advance when running and not paused.
    * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused,speed}
@@ -85,6 +98,9 @@ export const digitalrain = (() => {
     tickAcc += ctx.elapsed;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
+
+    // NEW: apply per-mode speed from global multiplier
+    applySpeed(ctx.speed);
 
     // trail fade
     g.fillStyle = 'rgba(0,0,0,0.08)';
@@ -109,7 +125,8 @@ export const digitalrain = (() => {
       if (y > H && Math.random() > 0.975) {
         drops[i] = Math.floor(-20 * Math.random());
       } else {
-        drops[i] += Math.max(0.25, ctx.speed || 1);
+        // one row per tick; speed is handled by tickMs now
+        drops[i] += 1;
       }
     }
   }

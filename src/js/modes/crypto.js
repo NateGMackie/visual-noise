@@ -142,9 +142,22 @@ export const crypto = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
+  // --- speed mapping (Crypto) ---
+  /**
+   * Update the emission cadence from the global speed multiplier.
+   * Keeps ~150ms between lines at 1.0×; higher multiplier emits faster.
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+    const midEmit = 150; // 150ms @ 1.0× feels right for crypto chatter
+    emitIntervalMs = Math.max(20, Math.round(midEmit / m));
+  }
+
   /**
    * Draw one frame and optionally emit new lines on cadence.
-   * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused}
+   * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused,speed}
    * @returns {void}
    */
   function frame(ctx) {
@@ -152,12 +165,15 @@ export const crypto = (() => {
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
+    // Apply global → per-mode speed mapping for cadence
+    applySpeed(ctx.speed);
+
     // Soft trail fade, respecting themed bg when provided
     const bg = readVar('--bg', '#000') || '#000';
     g.fillStyle = 'rgba(0,0,0,0.18)';
     if (bg !== '#000') {
       // gentle blend toward theme background
-      g.fillStyle = bg + 'E6'; // hex+alpha; harmless if non-hex
+      g.fillStyle = bg + 'E6'; // hex+alpha; ignored if non-hex
     }
     g.fillRect(0, 0, W, H);
 
