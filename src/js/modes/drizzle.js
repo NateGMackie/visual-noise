@@ -82,50 +82,60 @@ export const drizzle = (() => {
   }
 
   // --- speed mapping (Drizzle) ---
-function applySpeed(mult) {
-  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
-  // Keep 80ms @ 1.0× as midpoint for a breezy drizzle
-  tickMs = Math.max(16, Math.round(80 / m));
-}
+  /**
+   * Update the drizzle tick cadence from the global speed multiplier.
+   * 1.0× keeps ~80ms between row steps; higher = faster (smaller tickMs).
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+    // Keep 80ms @ 1.0× as midpoint for a breezy drizzle
+    tickMs = Math.max(16, Math.round(80 / m));
+  }
 
-
+  /**
+   * Render one frame of drizzle: fade the trail, advance drops on cadence,
+   * and draw sparse glyphs. Speed is applied via tickMs (rows per tick).
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
+   * @returns {void}
+   */
   function frame(ctx) {
-  const g = ctx.ctx2d;
-  tickAcc += ctx.elapsed;
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+    const g = ctx.ctx2d;
+    tickAcc += ctx.elapsed;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  // NEW: mode-specific speed
-  applySpeed(ctx.speed);
+    // NEW: mode-specific speed
+    applySpeed(ctx.speed);
 
-  // trail fade
-  g.fillStyle = 'rgba(0,0,0,0.10)';
-  g.fillRect(0, 0, W, H);
+    // trail fade
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    g.fillRect(0, 0, W, H);
 
-  // draw
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-  g.textBaseline = 'top';
-  g.fillStyle = readVar('--fg', '#03ffaf');
+    // draw
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = readVar('--fg', '#03ffaf');
 
-  const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
-  if (doAdvance) tickAcc -= tickMs;
+    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+    if (doAdvance) tickAcc -= tickMs;
 
-  for (let c = 0; c < cols; c++) {
-    const x = c * fontSize;
-    const y = drops[c] * lineH;
-    const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-    g.fillText(ch, x, y);
+    for (let c = 0; c < cols; c++) {
+      const x = c * fontSize;
+      const y = drops[c] * lineH;
+      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+      g.fillText(ch, x, y);
 
-    if (!doAdvance) continue;
+      if (!doAdvance) continue;
 
-    if (y > H && Math.random() > 0.98) {
-      drops[c] = Math.floor(-rows * Math.random());
-    } else {
-      drops[c] += 1; // one row per tick, speed via tickMs
+      if (y > H && Math.random() > 0.98) {
+        drops[c] = Math.floor(-rows * Math.random());
+      } else {
+        drops[c] += 1; // one row per tick, speed via tickMs
+      }
     }
   }
-}
-
 
   return { info, init, resize, start, stop, frame, clear };
 })();

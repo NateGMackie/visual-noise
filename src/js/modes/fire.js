@@ -151,15 +151,20 @@ export const fire = (() => {
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   // Map global speed multiplier (≈0.4..1.6) to our fixed-step interval.
-let stepMs = dtTarget;
-function applySpeed(ctx) {
-  const mult = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
-  // Keep midpoint "just right": at 1.0× → stepMs === dtTarget (30 FPS feel)
-  // Faster → smaller step; Slower → larger step. Clamp to avoid runaway loops.
-  const MIN_STEP = 1000 / 90; // don't simulate faster than ~90 steps/sec
-  stepMs = Math.max(MIN_STEP, Math.round(dtTarget / mult));
-}
-
+  let stepMs = dtTarget;
+  /**
+   * Update the simulation step interval from the global speed multiplier.
+   * Higher speed → smaller step (faster sim); lower speed → larger step.
+   * @param {*} ctx - Render context containing the `speed` multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(ctx) {
+    const mult = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
+    // Keep midpoint "just right": at 1.0× → stepMs === dtTarget (30 FPS feel)
+    // Faster → smaller step; Slower → larger step. Clamp to avoid runaway loops.
+    const MIN_STEP = 1000 / 90; // don't simulate faster than ~90 steps/sec
+    stepMs = Math.max(MIN_STEP, Math.round(dtTarget / mult));
+  }
 
   // Utils
 
@@ -327,72 +332,78 @@ function applySpeed(ctx) {
     }
   }
 
-function frame(ctx) {
-  const g = ctx.ctx2d;
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+  /**
+   * Draw one frame of ASCII fire, advancing the simulation at a fixed step
+   * scaled by the global speed multiplier, then rendering the heat as glyphs.
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, paused, speed }).
+   * @returns {void}
+   */
+  function frame(ctx) {
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  // Background
-  g.fillStyle = BG;
-  g.fillRect(0, 0, W, H);
+    // Background
+    g.fillStyle = BG;
+    g.fillRect(0, 0, W, H);
 
-  // --- NEW: apply global speed multiplier to our fixed-step interval
-  applySpeed(ctx);
+    // --- NEW: apply global speed multiplier to our fixed-step interval
+    applySpeed(ctx);
 
-  // Fixed-step sim (scaled by speed)
-  const now = nowMs();
-  let dt = now - lastT;
-  if (dt > 250) dt = 250; // cap to avoid large jumps
-  lastT = now;
-  acc += dt;
-  while (running && !ctx.paused && acc >= stepMs) {
-    stepSim();
-    acc -= stepMs;
-  }
-
-  // Draw cells as ASCII
-  const cellW = Math.ceil(W / Wc);
-  const cellH = Math.ceil(H / Hc);
-  const fontPx = Math.max(10, cellH);
-  g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-  g.textBaseline = 'top';
-  g.globalCompositeOperation = 'source-over';
-
-  for (let y = 0; y < Hc; y++) {
-    const yPix = y * cellH;
-    let lastFill = -1;
-    let glowing = false;
-
-    for (let x = 0; x < Wc; x++) {
-      const v = heat[y * Wc + x];
-      if (!v) continue;
-
-      const shade = SHADES[Math.min(SHADES.length - 1, ((v * SHADES.length) / PALETTE_SIZE) | 0)];
-      if (v !== lastFill) {
-        g.fillStyle = PAL[v];
-        lastFill = v;
-      }
-
-      const needsGlow = v > PALETTE_SIZE * 0.8;
-      if (needsGlow !== glowing) {
-        if (needsGlow) {
-          g.shadowColor = PAL[Math.min(PALETTE_SIZE - 1, v + 2)];
-          g.shadowBlur = Math.min(MAX_GLOW, 2 + (((v / PALETTE_SIZE) * MAX_GLOW) | 0));
-        } else {
-          g.shadowBlur = 0;
-          g.shadowColor = 'transparent';
-        }
-        glowing = needsGlow;
-      }
-
-      g.fillText(shade, x * cellW, yPix);
+    // Fixed-step sim (scaled by speed)
+    const now = nowMs();
+    let dt = now - lastT;
+    if (dt > 250) dt = 250; // cap to avoid large jumps
+    lastT = now;
+    acc += dt;
+    while (running && !ctx.paused && acc >= stepMs) {
+      stepSim();
+      acc -= stepMs;
     }
 
-    // reset per row
-    g.shadowBlur = 0;
-    g.shadowColor = 'transparent';
+    // Draw cells as ASCII
+    const cellW = Math.ceil(W / Wc);
+    const cellH = Math.ceil(H / Hc);
+    const fontPx = Math.max(10, cellH);
+    g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    g.textBaseline = 'top';
+    g.globalCompositeOperation = 'source-over';
+
+    for (let y = 0; y < Hc; y++) {
+      const yPix = y * cellH;
+      let lastFill = -1;
+      let glowing = false;
+
+      for (let x = 0; x < Wc; x++) {
+        const v = heat[y * Wc + x];
+        if (!v) continue;
+
+        const shade = SHADES[Math.min(SHADES.length - 1, ((v * SHADES.length) / PALETTE_SIZE) | 0)];
+        if (v !== lastFill) {
+          g.fillStyle = PAL[v];
+          lastFill = v;
+        }
+
+        const needsGlow = v > PALETTE_SIZE * 0.8;
+        if (needsGlow !== glowing) {
+          if (needsGlow) {
+            g.shadowColor = PAL[Math.min(PALETTE_SIZE - 1, v + 2)];
+            g.shadowBlur = Math.min(MAX_GLOW, 2 + (((v / PALETTE_SIZE) * MAX_GLOW) | 0));
+          } else {
+            g.shadowBlur = 0;
+            g.shadowColor = 'transparent';
+          }
+          glowing = needsGlow;
+        }
+
+        g.fillText(shade, x * cellW, yPix);
+      }
+
+      // reset per row
+      g.shadowBlur = 0;
+      g.shadowColor = 'transparent';
+    }
   }
-}
 
   return { init, resize, start, stop, frame, clear };
 })();

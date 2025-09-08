@@ -75,13 +75,18 @@ export const digitalrain = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-// --- speed mapping (DR) ---
-function applySpeed(mult) {
-  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1)); // global 0.4–1.6
-  // Keep 75ms @ 1.0× as the midpoint; faster multipliers reduce the delay
-  tickMs = Math.max(16, Math.round(75 / m));
-}
-
+  // --- speed mapping (DigitalRain) ---
+  /**
+   * Update the stream tick cadence from the global speed multiplier.
+   * 1.0× keeps ~75ms between row steps; higher = faster (smaller tickMs).
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1)); // global 0.4–1.6
+    // Keep 75ms @ 1.0× as the midpoint; faster multipliers reduce the delay
+    tickMs = Math.max(16, Math.round(75 / m));
+  }
 
   /**
    * Draw one frame; advance when running and not paused.
@@ -89,43 +94,42 @@ function applySpeed(mult) {
    * @returns {void}
    */
   function frame(ctx) {
-  const g = ctx.ctx2d;
-  tickAcc += ctx.elapsed;
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+    const g = ctx.ctx2d;
+    tickAcc += ctx.elapsed;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  // NEW: apply per-mode speed from global multiplier
-  applySpeed(ctx.speed);
+    // NEW: apply per-mode speed from global multiplier
+    applySpeed(ctx.speed);
 
-  // trail fade
-  g.fillStyle = 'rgba(0,0,0,0.08)';
-  g.fillRect(0, 0, W, H);
+    // trail fade
+    g.fillStyle = 'rgba(0,0,0,0.08)';
+    g.fillRect(0, 0, W, H);
 
-  // draw streams
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-  g.textBaseline = 'top';
-  g.fillStyle = readVar('--fg', '#0f0');
+    // draw streams
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = readVar('--fg', '#0f0');
 
-  const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
-  if (doAdvance) tickAcc -= tickMs;
+    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+    if (doAdvance) tickAcc -= tickMs;
 
-  for (let i = 0; i < cols; i++) {
-    const x = i * fontSize;
-    const y = drops[i] * fontSize;
-    const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-    g.fillText(ch, x, y);
+    for (let i = 0; i < cols; i++) {
+      const x = i * fontSize;
+      const y = drops[i] * fontSize;
+      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+      g.fillText(ch, x, y);
 
-    if (!doAdvance) continue;
+      if (!doAdvance) continue;
 
-    if (y > H && Math.random() > 0.975) {
-      drops[i] = Math.floor(-20 * Math.random());
-    } else {
-      // one row per tick; speed is handled by tickMs now
-      drops[i] += 1;
+      if (y > H && Math.random() > 0.975) {
+        drops[i] = Math.floor(-20 * Math.random());
+      } else {
+        // one row per tick; speed is handled by tickMs now
+        drops[i] += 1;
+      }
     }
   }
-}
-
 
   return { init, resize, start, stop, frame, clear };
 })();

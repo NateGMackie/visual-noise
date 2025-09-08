@@ -4,6 +4,23 @@
 import { randInt } from '../lib/index.js';
 
 /**
+ * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
+ * @typedef {*} CanvasRenderingContext2D
+ */
+/**
+ * Render context passed to mode functions each frame.
+ * @typedef {object} VNRenderContext
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
+ * @property {number} w - Canvas width in CSS pixels.
+ * @property {number} h - Canvas height in CSS pixels.
+ * @property {number} dpr - Device pixel ratio.
+ * @property {number} elapsed - Milliseconds since the last frame.
+ * @property {boolean} paused - Whether the animation is paused.
+ * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ */
+
+/**
  * Sysadmin console: emits status lines (CPU/MEM/NET/DISK) with light trail.
  * Exports the standard mode API: init, resize, start, stop, frame, clear.
  */
@@ -167,54 +184,63 @@ export const sysadmin = (() => {
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  // --- speed mapping (Sysadmin) ---
-function applySpeed(mult) {
-  const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
-  const midEmit = 140;           // 140ms between lines @ 1.0×
-  emitIntervalMs = Math.max(20, Math.round(midEmit / m));
-}
+  /**
+   * Update the line-emission cadence based on the global speed multiplier.
+   * Keeps 1.0× at ~140ms between lines; higher multipliers emit faster.
+   * @param {number} mult - Global speed multiplier (≈ 0.4–1.6).
+   * @returns {void} No return value.
+   */
+  function applySpeed(mult) {
+    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
+    const midEmit = 140; // 140ms between lines @ 1.0×
+    emitIntervalMs = Math.max(20, Math.round(midEmit / m));
+  }
 
-
+  /**
+   * Render one frame and, if running, emit new lines based on cadence.
+   * Applies per-mode speed mapping using the local helper applySpeed().
+   * @param {VNRenderContext} ctx - Render context for this frame.
+   * @returns {void}
+   */
   function frame(ctx) {
-  const g = ctx.ctx2d;
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  // NEW: per-mode speed mapping
-  applySpeed(ctx.speed);
+    // per-mode speed mapping
+    applySpeed(ctx.speed);
 
-  // background trail
-  const bg = readVar('--bg', '#000') || '#000';
-  g.fillStyle = 'rgba(0,0,0,0.16)';
-  if (bg !== '#000') g.fillStyle = 'rgba(0,0,0,0.16)';
-  g.fillRect(0, 0, W, H);
+    // background trail
+    const bg = readVar('--bg', '#000') || '#000';
+    g.fillStyle = 'rgba(0,0,0,0.16)';
+    if (bg !== '#000') g.fillStyle = 'rgba(0,0,0,0.16)';
+    g.fillRect(0, 0, W, H);
 
-  // emission timing
-  if (running && !ctx.paused) {
-    emitAccumulator += ctx.elapsed;
-    while (emitAccumulator >= emitIntervalMs) {
-      emitAccumulator -= emitIntervalMs;
-      push(makeLine());
+    // emission timing
+    if (running && !ctx.paused) {
+      emitAccumulator += ctx.elapsed;
+      while (emitAccumulator >= emitIntervalMs) {
+        emitAccumulator -= emitIntervalMs;
+        push(makeLine());
+      }
+    }
+
+    // visible slice & draw
+    const lines = buffer.slice(Math.max(0, buffer.length - rows));
+    const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = fg;
+
+    let y = 4;
+    const xPad = 8;
+    for (let i = 0; i < lines.length; i++) {
+      const txt = lines[i];
+      const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
+      g.fillText(out, xPad, y);
+      y += lineH;
     }
   }
-
-  // visible slice & draw (unchanged)
-  const lines = buffer.slice(Math.max(0, buffer.length - rows));
-  const fg = readVar('--fg', '#9fffb3').trim() || '#9fffb3';
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
-  g.textBaseline = 'top';
-  g.fillStyle = fg;
-
-  let y = 4;
-  const xPad = 8;
-  for (let i = 0; i < lines.length; i++) {
-    const txt = lines[i];
-    const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
-    g.fillText(out, xPad, y);
-    y += lineH;
-  }
-}
-
 
   return { init, resize, start, stop, frame, clear };
 })();

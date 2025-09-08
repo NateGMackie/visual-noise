@@ -124,22 +124,29 @@ export const fireAscii = (() => {
     g.restore();
   }
 
+  /**
+   * Update the fire parameters based on the global speed multiplier.
+   * Higher speed increases ember spawn chance and reduces cooling.
+   * @param {*} ctx - Render context containing the `speed` multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(ctx) {
-  // Global multiplier 0.4..1.6; normalize to 0..1
-  const m = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
-  const t = (m - 0.4) / (1.6 - 0.4); // 0..1
+    // Global multiplier 0.4..1.6; normalize to 0..1
+    const m = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
+    const t = (m - 0.4) / (1.6 - 0.4); // 0..1
 
-  // Rebuild emberChance/cooling from multiplier so 1.0× is your "just right"
-  // These ranges match the feel of your old index mapping:
-  // emberChance: 0.25 → 0.60 across the range
-  // coolBase   : 0.70 → 1.20 across the range
-  const emberMin = 0.25, emberMax = 0.60;
-  const coolMin  = 0.70, coolMax  = 1.20;
+    // Rebuild emberChance/cooling from multiplier so 1.0× is your "just right"
+    // These ranges match the feel of your old index mapping:
+    // emberChance: 0.25 → 0.60 across the range
+    // coolBase   : 0.70 → 1.20 across the range
+    const emberMin = 0.25,
+      emberMax = 0.6;
+    const coolMin = 0.7,
+      coolMax = 1.2;
 
-  emberChance = emberMin + t * (emberMax - emberMin);
-  coolBase    = coolMin  + t * (coolMax  - coolMin);
-}
-
+    emberChance = emberMin + t * (emberMax - emberMin);
+    coolBase = coolMin + t * (coolMax - coolMin);
+  }
 
   /**
    * Draw one frame and advance simulation when running.

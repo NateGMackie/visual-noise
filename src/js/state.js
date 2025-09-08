@@ -338,8 +338,8 @@ export function setSpeed(next) {
   // Keep legacy multiplier coherent
   const steps = Math.max(1, Number(max));
   cfg.speed = indexToMultiplier(clampedIndex, steps);
-// Also emit an index-style event for X/N UI toasts
-emit('speed.step', { index: active.speed, total: speedBounds().max });
+  // Also emit an index-style event for X/N UI toasts
+  emit('speed.step', { index: active.speed, total: speedBounds().max });
 
   // Emit the multiplier (legacy behavior), but callers can read the label via getSpeedLabel()
   emit('speed', cfg.speed);
@@ -357,7 +357,7 @@ export function stepSpeed(delta) {
 
 /**
  * Human-friendly "X/N" label for the active speed index.
- * @returns {string}
+ * @returns {string} A display label like "6/10" reflecting the current index and total steps.
  */
 export function getSpeedLabel() {
   const { max } = speedBounds();
@@ -367,7 +367,7 @@ export function getSpeedLabel() {
 
 /**
  * Read the current speed multiplier (what render loops should use).
- * @returns {number}
+ * @returns {number} The global speed multiplier derived from the index (≈0.4–1.6).
  */
 export function getSpeedMultiplier() {
   return cfg.speed;

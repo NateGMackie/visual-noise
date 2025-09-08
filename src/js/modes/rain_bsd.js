@@ -1,8 +1,6 @@
 // src/js/modes/rain_bsd.js
 /* eslint-env browser */
 
-import { clamp } from '../lib/index.js';
-
 /**
  * Program: Rain_BSD
  * Genre: Rain
@@ -202,35 +200,40 @@ export const rain_bsd = (() => {
     if (ctx && ctx.ctx2d) ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
+  /**
+   * Render one frame: advance splash stages on a fixed cadence and draw the grid.
+   * Speed is applied as a global multiplier (≈0.4–1.6) to the step interval.
+   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
+   * @returns {void}
+   */
   function frame(ctx) {
-  if (!g) return;
+    if (!g) return;
 
-  // 🔄 pick up vibe changes live
-  updatePaletteFromCss();
+    // 🔄 pick up vibe changes live
+    updatePaletteFromCss();
 
-  // GLOBAL range 0.4..1.6; align with other modes
-  const m = Math.max(0.4, Math.min(1.6, Number(ctx.speed) || 1));
-  const stepMs = stepBaseMs / m;
+    // GLOBAL range 0.4..1.6; align with other modes
+    const m = Math.max(0.4, Math.min(1.6, Number(ctx.speed) || 1));
+    const stepMs = stepBaseMs / m;
 
-  let dt = typeof ctx.elapsed === 'number' ? ctx.elapsed : 16.7;
-  tickAccMs += dt;
+    let dt = typeof ctx.elapsed === 'number' ? ctx.elapsed : 16.7;
+    tickAccMs += dt;
 
-  const shouldAdvance = running && !ctx.paused;
-  if (shouldAdvance) {
-    while (tickAccMs >= stepMs) {
-      tickAccMs -= stepMs;
-      tickOnce();
+    const shouldAdvance = running && !ctx.paused;
+    if (shouldAdvance) {
+      while (tickAccMs >= stepMs) {
+        tickAccMs -= stepMs;
+        tickOnce();
+      }
     }
+
+    // draw
+    const W = (ctx.w || canvas.width) / dpr;
+    const H = (ctx.h || canvas.height) / dpr;
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, H);
+    drawAllEntries();
   }
-
-  // draw (unchanged)
-  const W = (ctx.w || canvas.width) / dpr;
-  const H = (ctx.h || canvas.height) / dpr;
-  g.fillStyle = bg;
-  g.fillRect(0, 0, W, H);
-  drawAllEntries();
-}
-
 
   // --- internals -----------------------------------------------------------
   /**
@@ -297,6 +300,18 @@ export const rain_bsd = (() => {
         put(x - 1, y + 1, '\\ /');
         put(x, y + 2, '-');
         break;
+    }
+  }
+
+  /**
+   * Draw all active splash entries using the current foreground color.
+   * @returns {void}
+   */
+  function drawAllEntries() {
+    g.fillStyle = fg;
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      drawStage(e.x, e.y, e.stage);
     }
   }
 

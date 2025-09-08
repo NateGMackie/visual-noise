@@ -82,19 +82,19 @@ export function syncPauseButton() {
  */
 export function initMenu() {
   // Elements
-  const modeName  = document.getElementById('genreName') || document.getElementById('modeName');
-  const typeName  = document.getElementById('styleName') || document.getElementById('typeName');
-  const themeName = document.getElementById('vibeName')  || document.getElementById('themeName');
+  const modeName = document.getElementById('genreName') || document.getElementById('modeName');
+  const typeName = document.getElementById('styleName') || document.getElementById('typeName');
+  const themeName = document.getElementById('vibeName') || document.getElementById('themeName');
 
-  const modeLabelEl  = modeName?.closest('label')  || modeName;
-  const styleLabelEl = typeName?.closest('label')  || typeName;
+  const modeLabelEl = modeName?.closest('label') || modeName;
+  const styleLabelEl = typeName?.closest('label') || typeName;
   const themeLabelEl = themeName?.closest('label') || themeName;
 
-  const speedUpBtn   = document.getElementById('speedUp');
+  const speedUpBtn = document.getElementById('speedUp');
   const speedDownBtn = document.getElementById('speedDown');
-  const pauseBtn     = document.getElementById('pauseBtn');
-  const clearBtn     = document.getElementById('clearBtn');
-  const awakeBtn     = document.getElementById('awakeBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const awakeBtn = document.getElementById('awakeBtn');
 
   const modes = Object.keys(registry);
 
@@ -120,8 +120,8 @@ export function initMenu() {
     }));
 
     const currentMode = cfg.persona;
-    const curFam  = meta[currentMode]?.familyLabel || '';
-    const curType = meta[currentMode]?.typeLabel   || '';
+    const curFam = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel || '';
     const famIdx = Math.max(0, familyList.indexOf(curFam));
 
     const dir = e?.shiftKey ? -1 : +1;
@@ -131,8 +131,7 @@ export function initMenu() {
 
     // Prefer to keep the same type in the next family; fallback to first mode
     const candidate =
-      nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) ||
-      nextFamily.modes[0];
+      nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) || nextFamily.modes[0];
 
     setMode(candidate);
     setModeLabel();
@@ -161,8 +160,8 @@ export function initMenu() {
     }));
 
     const currentMode = cfg.persona;
-    const curFam  = meta[currentMode]?.familyLabel || '';
-    const curType = meta[currentMode]?.typeLabel   || '';
+    const curFam = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel || '';
     const famIdx = Math.max(0, familyList.indexOf(curFam));
     const typesInFam = Array.from(
       new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
@@ -170,7 +169,7 @@ export function initMenu() {
     if (!typesInFam.length) return;
 
     const dir = e?.shiftKey ? -1 : +1;
-    const typeIdx  = Math.max(0, typesInFam.indexOf(curType));
+    const typeIdx = Math.max(0, typesInFam.indexOf(curType));
     const nextType =
       typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
 
@@ -185,7 +184,7 @@ export function initMenu() {
   });
 
   // --- Buttons ---
-  if (speedUpBtn)   speedUpBtn.onclick   = () => incSpeed();
+  if (speedUpBtn) speedUpBtn.onclick = () => incSpeed();
   if (speedDownBtn) speedDownBtn.onclick = () => decSpeed();
 
   if (pauseBtn) {

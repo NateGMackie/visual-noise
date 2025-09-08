@@ -11,8 +11,8 @@
  * @type {SpeedModel}
  */
 export const DEFAULT_SPEED_MODEL = (() => {
-  const steps = 10;            // “/10” UI
-  const defaultIndex = 5;      // midpoint
+  const steps = 10; // “/10” UI
+  const defaultIndex = 5; // midpoint
   const minMult = 0.4;
   const maxMult = 1.6;
   const map = (idx) => {
@@ -37,6 +37,9 @@ export function coerceSpeedModel(m) {
   const map =
     typeof m.map === 'function'
       ? (idx) => m.map(Math.max(0, Math.min(steps - 1, idx)))
-      : (idx) => DEFAULT_SPEED_MODEL.map(Math.round((idx / (steps - 1)) * (DEFAULT_SPEED_MODEL.steps - 1)));
+      : (idx) =>
+          DEFAULT_SPEED_MODEL.map(
+            Math.round((idx / (steps - 1)) * (DEFAULT_SPEED_MODEL.steps - 1))
+          );
   return { steps, defaultIndex, map };
 }
