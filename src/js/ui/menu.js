@@ -106,6 +106,9 @@ export function initMenu() {
   };
   const setThemeLabel = (name) => {
     if (themeName) themeName.textContent = name;
+    if (themeName && typeof name === 'string') {
+      themeName.dataset.vibe = name;
+    }
   };
 
   // --- Clickable labels ---
@@ -113,7 +116,9 @@ export function initMenu() {
   // Genre/Mode: cycle families (Shift+click = previous)
   makeClickable(modeLabelEl, (e) => {
     const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
-    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(
+      Boolean
+    );
     const byFamily = familyList.map((fam) => ({
       family: fam,
       modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
@@ -153,7 +158,9 @@ export function initMenu() {
   // Style: cycle within current family (Shift+click = previous)
   makeClickable(styleLabelEl, (e) => {
     const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
-    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(
+      Boolean
+    );
     const byFamily = familyList.map((fam) => ({
       family: fam,
       modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
@@ -164,8 +171,8 @@ export function initMenu() {
     const curType = meta[currentMode]?.typeLabel || '';
     const famIdx = Math.max(0, familyList.indexOf(curFam));
     const typesInFam = Array.from(
-      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
-    );
+      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || '')).values()
+    ).filter(Boolean);
     if (!typesInFam.length) return;
 
     const dir = e?.shiftKey ? -1 : +1;
@@ -197,6 +204,25 @@ export function initMenu() {
 
   if (clearBtn) clearBtn.onclick = () => clearAll();
 
+  // Centralized toggle to keep logic consistent between click + hotkey
+  const toggleAwake = async () => {
+    const currentlyOn = WakeLock.isEnabled();
+    let next = false;
+    if (currentlyOn) {
+      WakeLock.disable();
+      next = false;
+    } else {
+      next = (await WakeLock.enable()) === true;
+      if (!next) {
+        // If request failed (e.g., unsupported or denied), ensure it's off
+        WakeLock.disable();
+      }
+    }
+    LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
+    emit('power', next);
+    syncAwakeButton();
+  };
+
   if (awakeBtn) {
     // Initialize from persisted preference
     const stored = (LS?.getItem?.('vn.keepAwake') || '').trim();
@@ -213,26 +239,28 @@ export function initMenu() {
     })();
 
     // Toggle on click / keyboard
-    awakeBtn.onclick = async () => {
-      const currentlyOn = WakeLock.isEnabled();
-      let next = false;
-      if (currentlyOn) {
-        WakeLock.disable();
-        next = false;
-      } else {
-        next = (await WakeLock.enable()) === true;
-        if (!next) {
-          // If request failed (e.g., unsupported), keep it off
-          WakeLock.disable();
-        }
-      }
-      LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
-      emit('power', next);
-      syncAwakeButton();
-    };
-
+    awakeBtn.onclick = toggleAwake;
     syncAwakeButton();
+
+    // Keep label honest when tab visibility/focus affects wake lock state
+    const resync = () => syncAwakeButton();
+    document.addEventListener('visibilitychange', resync);
+    window.addEventListener('focus', resync);
+    window.addEventListener('blur', resync);
   }
+
+  // Keyboard hotkey: 'A' toggles Keep Awake (no modifiers)
+  // We avoid toggling when user is typing in inputs/textareas/contenteditable.
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target && (e.target.tagName || '')).toLowerCase();
+    const editable =
+      tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable);
+    if (editable) return;
+    if (e.key && e.key.toLowerCase() === 'a' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      toggleAwake();
+    }
+  });
 
   // Initial label paint
   setModeLabel();

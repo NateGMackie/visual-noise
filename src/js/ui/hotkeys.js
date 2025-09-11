@@ -11,15 +11,17 @@
  * @param {(dir:number)=>void} root0.cycleTheme - Cycle theme/vibe: -1 (prev) or +1 (next).
  * @param {()=>void} root0.toggleControls - Toggle the controls HUD visibility.
  * @param {(html:string)=>void} [root0.setHudHelp] - Optional: render on-screen help HTML.
+ * @param {()=>void} [root0.toggleAwake] - Optional: toggle Keep Awake (WakeLock enable/disable).
  * @returns {void}
  */
 export function installHotkeys({
-  cycleFamily, // (dir) => void    dir: -1 | +1
-  cycleFlavor, // (dir) => void
-  selectModeNum, // (n)  => void    n: 1..10  (0 maps to 10)
-  cycleTheme, // (dir) => void
-  toggleControls, // ()   => void
-  setHudHelp, // (html) => void  optional; updates help/hints if provided
+  cycleFamily,
+  cycleFlavor,
+  selectModeNum,
+  cycleTheme,
+  toggleControls,
+  setHudHelp,
+  toggleAwake,
 }) {
   const helpHTML = `
     <div class="hud-help">
@@ -28,12 +30,13 @@ export function installHotkeys({
       <div><strong>Modes:</strong> 1–9, 0 = 10</div>
       <div><strong>Themes:</strong> t / Shift+T</div>
       <div><strong>Controls:</strong> m (toggle)</div>
+      <div><strong>Keep&nbsp;Awake:</strong> a</div>
     </div>
   `;
   try {
     setHudHelp?.(helpHTML);
-  } catch (e) {
-    void e; // ignore renderer errors (non-fatal)
+  } catch {
+    // ignore help renderer errors (non-fatal)
   }
 
   const isInputLike = (el) => {
@@ -48,17 +51,15 @@ export function installHotkeys({
       // Don’t hijack typing inside inputs/textareas/content-editable
       if (isInputLike(document.activeElement)) return;
 
-      // Normalize
-      const k = e.key; // human-readable, respects OS layout (can be “Dead” on some layouts)
-      const code = e.code; // physical key identifier (e.g., "BracketLeft", "Comma")
+      const k = e.key; // user-facing key (locale-aware)
+      const code = e.code; // physical key (e.g., "BracketLeft", "KeyA")
       const s = e.shiftKey;
 
-      // Helper to safely call and prevent defaults
       const doAct = (fn, ...args) => {
         try {
           fn?.(...args);
-        } catch (err) {
-          void err;
+        } catch {
+          /* ignore errors in hotkey handlers */
         }
         e.preventDefault();
         e.stopPropagation();
@@ -73,22 +74,18 @@ export function installHotkeys({
       }
 
       // --- Families prev/next: [ / ]  (fallback , / .) ---
-      // Left
-      if (!s && (k === '[' || code === 'BracketLeft' || code === 'Comma' || k === ',')) {
+      if (!s && (k === '[' || code === 'BracketLeft' || k === ',' || code === 'Comma')) {
         return doAct(cycleFamily, -1);
       }
-      // Right
-      if (!s && (k === ']' || code === 'BracketRight' || code === 'Period' || k === '.')) {
+      if (!s && (k === ']' || code === 'BracketRight' || k === '.' || code === 'Period')) {
         return doAct(cycleFamily, +1);
       }
 
       // --- Flavors prev/next: Shift+[ / Shift+]  (fallback ; / ') ---
-      // Prev flavor
-      if (s && (k === '{' || code === 'BracketLeft' || code === 'Semicolon' || k === ';')) {
+      if (s && (k === '{' || code === 'BracketLeft' || k === ';' || code === 'Semicolon')) {
         return doAct(cycleFlavor, -1);
       }
-      // Next flavor
-      if (s && (k === '}' || code === 'BracketRight' || code === 'Quote' || k === "'")) {
+      if (s && (k === '}' || code === 'BracketRight' || k === "'" || code === 'Quote')) {
         return doAct(cycleFlavor, +1);
       }
 
@@ -96,6 +93,18 @@ export function installHotkeys({
       if (!e.altKey && !e.ctrlKey && !e.metaKey && /^[0-9]$/.test(k)) {
         const n = k === '0' ? 10 : parseInt(k, 10);
         return doAct(selectModeNum, n);
+      }
+
+      // --- Keep Awake toggle: only plain "a" (no shift/ctrl/alt/meta) ---
+      if (
+        typeof toggleAwake === 'function' &&
+        !s &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (k === 'a' || k === 'A' || code === 'KeyA')
+      ) {
+        return doAct(toggleAwake);
       }
     },
     { capture: true }
