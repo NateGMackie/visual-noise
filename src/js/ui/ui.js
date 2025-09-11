@@ -291,29 +291,28 @@ export function initUI() {
   };
 
   const toggleAwake = async () => {
-  const on = !!WakeLock.isEnabled();
-  let next = false;
-  if (on) {
-    WakeLock.disable();
-    next = false;
-  } else {
-    next = (await WakeLock.enable()) === true;
-    if (!next) WakeLock.disable();
-  }
+    const on = !!WakeLock.isEnabled();
+    let next = false;
+    if (on) {
+      WakeLock.disable();
+      next = false;
+    } else {
+      next = (await WakeLock.enable()) === true;
+      if (!next) WakeLock.disable();
+    }
 
-  // Safely persist to localStorage if available
-  try {
-    const LS = globalThis.localStorage || window.localStorage;
-    LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
-  } catch {
-    // Ignore storage errors (e.g., privacy mode, quota exceeded)
-  }
+    // Safely persist to localStorage if available
+    try {
+      const LS = globalThis.localStorage || window.localStorage;
+      LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
+    } catch {
+      // Ignore storage errors (e.g., privacy mode, quota exceeded)
+    }
 
-  // notify + refresh button label
-  window.app?.events?.emit?.('power', next);
-  syncAwakeButton();
-};
-
+    // notify + refresh button label
+    window.app?.events?.emit?.('power', next);
+    syncAwakeButton();
+  };
 
   // Install centralized hotkeys (includes Shift+A)
   installHotkeys({

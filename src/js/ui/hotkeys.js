@@ -34,12 +34,10 @@ export function installHotkeys({
     </div>
   `;
   try {
-  setHudHelp?.(helpHTML);
-} catch (_err) { // eslint-disable-line no-unused-vars
-  // ignore help renderer errors (non-fatal)
-}
-
-
+    setHudHelp?.(helpHTML);
+  } catch {
+    // ignore help renderer errors (non-fatal)
+  }
 
   const isInputLike = (el) => {
     if (!el) return false;
@@ -47,59 +45,68 @@ export function installHotkeys({
     return tag === 'input' || tag === 'textarea' || el.isContentEditable;
   };
 
-  window.addEventListener('keydown', (e) => {
-    // Don’t hijack typing inside inputs/textareas/content-editable
-    if (isInputLike(document.activeElement)) return;
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      // Don’t hijack typing inside inputs/textareas/content-editable
+      if (isInputLike(document.activeElement)) return;
 
-    const k = e.key;       // user-facing key (locale-aware)
-    const code = e.code;   // physical key (e.g., "BracketLeft", "KeyA")
-    const s = e.shiftKey;
+      const k = e.key; // user-facing key (locale-aware)
+      const code = e.code; // physical key (e.g., "BracketLeft", "KeyA")
+      const s = e.shiftKey;
 
-    const doAct = (fn, ...args) => {
-      try { fn?.(...args); } catch {
-    /* ignore errors in hotkey handlers */
-  }
-      e.preventDefault();
-      e.stopPropagation();
-    };
+      const doAct = (fn, ...args) => {
+        try {
+          fn?.(...args);
+        } catch {
+          /* ignore errors in hotkey handlers */
+        }
+        e.preventDefault();
+        e.stopPropagation();
+      };
 
-    // --- Controls toggle ---
-    if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
+      // --- Controls toggle ---
+      if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
 
-    // --- Theme next/prev: t / Shift+T ---
-    if ((k === 't' || k === 'T') && !e.altKey && !e.ctrlKey && !e.metaKey) {
-      return doAct(cycleTheme, s ? -1 : +1);
-    }
+      // --- Theme next/prev: t / Shift+T ---
+      if ((k === 't' || k === 'T') && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        return doAct(cycleTheme, s ? -1 : +1);
+      }
 
-    // --- Families prev/next: [ / ]  (fallback , / .) ---
-    if (!s && (k === '[' || code === 'BracketLeft' || k === ',' || code === 'Comma')) {
-      return doAct(cycleFamily, -1);
-    }
-    if (!s && (k === ']' || code === 'BracketRight' || k === '.' || code === 'Period')) {
-      return doAct(cycleFamily, +1);
-    }
+      // --- Families prev/next: [ / ]  (fallback , / .) ---
+      if (!s && (k === '[' || code === 'BracketLeft' || k === ',' || code === 'Comma')) {
+        return doAct(cycleFamily, -1);
+      }
+      if (!s && (k === ']' || code === 'BracketRight' || k === '.' || code === 'Period')) {
+        return doAct(cycleFamily, +1);
+      }
 
-    // --- Flavors prev/next: Shift+[ / Shift+]  (fallback ; / ') ---
-    if (s && (k === '{' || code === 'BracketLeft' || k === ';' || code === 'Semicolon')) {
-      return doAct(cycleFlavor, -1);
-    }
-    if (s && (k === '}' || code === 'BracketRight' || k === "'" || code === 'Quote')) {
-      return doAct(cycleFlavor, +1);
-    }
+      // --- Flavors prev/next: Shift+[ / Shift+]  (fallback ; / ') ---
+      if (s && (k === '{' || code === 'BracketLeft' || k === ';' || code === 'Semicolon')) {
+        return doAct(cycleFlavor, -1);
+      }
+      if (s && (k === '}' || code === 'BracketRight' || k === "'" || code === 'Quote')) {
+        return doAct(cycleFlavor, +1);
+      }
 
-    // --- Direct mode select: 1..9, 0=10 ---
-    if (!e.altKey && !e.ctrlKey && !e.metaKey && /^[0-9]$/.test(k)) {
-      const n = k === '0' ? 10 : parseInt(k, 10);
-      return doAct(selectModeNum, n);
-    }
+      // --- Direct mode select: 1..9, 0=10 ---
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && /^[0-9]$/.test(k)) {
+        const n = k === '0' ? 10 : parseInt(k, 10);
+        return doAct(selectModeNum, n);
+      }
 
-    // --- Keep Awake toggle: only plain "a" (no shift/ctrl/alt/meta) ---
-    if (
-      typeof toggleAwake === 'function' &&
-      !s && !e.altKey && !e.ctrlKey && !e.metaKey &&
-      ((k === 'a' || k === 'A') || code === 'KeyA')
-    ) {
-      return doAct(toggleAwake);
-    }
-  }, { capture: true });
+      // --- Keep Awake toggle: only plain "a" (no shift/ctrl/alt/meta) ---
+      if (
+        typeof toggleAwake === 'function' &&
+        !s &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (k === 'a' || k === 'A' || code === 'KeyA')
+      ) {
+        return doAct(toggleAwake);
+      }
+    },
+    { capture: true }
+  );
 }
