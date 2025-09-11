@@ -14,11 +14,6 @@
  * @typedef {unknown} DomElement
  */
 
-/**
- * Notification channel constants.
- * @readonly
- * @enum {string}
- */
 const NOTIFY = Object.freeze({
   genre: 'notify.genre',
   style: 'notify.style',
@@ -26,12 +21,20 @@ const NOTIFY = Object.freeze({
   speed: 'notify.speed',
   state: 'notify.state',
   power: 'notify.power',
+
+  // Fire
   fireHeight: 'notify.fire.height',
   fireFuel: 'notify.fire.fuel',
+
+  // Rain (NEW)
+  rainTail: 'notify.rain.tail',
+  rainSpawn: 'notify.rain.spawn',
+
   // Legacy aliases
   system: 'notify.genre',
   program: 'notify.style',
 });
+
 
 // -------------------------
 // Configuration
@@ -78,6 +81,11 @@ const CHANNEL_OPTIONS = {
 
   // State changes
   [NOTIFY.state]: { coalesce: true, durationMs: 1200, coalesceWindowMs: 1200 },
+
+  [NOTIFY.rainTail]:  { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
+[NOTIFY.rainSpawn]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
+
+
 };
 
 // -------------------------
@@ -300,10 +308,15 @@ function titleForChannel(channel) {
       return 'Fire • Height';
     case NOTIFY.fireFuel:
       return 'Fire • Fuel';
+    case NOTIFY.rainTail:
+      return 'Rain • Tail';
+    case NOTIFY.rainSpawn:
+      return 'Rain • Spawn';
     default:
       return 'Notice';
   }
 }
+
 
 // -------------------------
 // Public API
@@ -450,11 +463,7 @@ function wireBus(on) {
   on('theme', (v) => notify(NOTIFY.vibe, String(v), { coalesce: true })); // legacy alias
 
   // --- SPEED ---
-  // Backward-compat: if 'speed' is a number → show multiplier "Speed: 0.7×"
-  // If it's an object { index, total } → show "Speed X/N"
-  // If a recent 'speed.step' happened, prefer the X/N toast and ignore the numeric one.
   on('speed', (payload) => {
-    // If we just showed X/N within the coalesce window, ignore numeric multiplier updates.
     const justStepped = now() - _lastSpeedStepAt <= getChannelOpts(NOTIFY.speed).coalesceWindowMs;
 
     if (payload && typeof payload === 'object') {
@@ -465,43 +474,21 @@ function wireBus(on) {
       }
     }
 
-    if (justStepped) return; // keep the X/N toast visible
+    if (justStepped) return;
 
     const s = payload;
     const val = typeof s === 'number' && s.toFixed ? s.toFixed(1) : String(s);
     notify(NOTIFY.speed, `Speed: ${val}×`, { coalesce: true });
   });
 
-  // Explicit step event (mirrors fire.*.step pattern). Records timing so we can prefer X/N.
   on('speed.step', (payload) => {
     let index, total;
     if (payload && typeof payload === 'object') ({ index, total } = payload);
     else {
-      try {
-        ({ index, total } = JSON.parse(payload));
-      } catch {
-        /* ignore malformed JSON payloads */
-      }
+      try { ({ index, total } = JSON.parse(payload)); } catch {}
     }
     if (Number.isFinite(index) && Number.isFinite(total)) {
       _lastSpeedStepAt = now();
-      notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
-    }
-  });
-  // --- /SPEED ---
-
-  // New explicit step event (mirrors fire.*.step pattern)
-  on('speed.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try {
-        ({ index, total } = JSON.parse(payload));
-      } catch {
-        /* ignore malformed JSON payloads */
-      }
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
       notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
     }
   });
@@ -515,20 +502,14 @@ function wireBus(on) {
 
   // Fire controls (numeric + step)
   on('fire.height', (h) => {
-    // If you prefer only steps, comment this numeric line out.
     const val = typeof h === 'number' ? h.toFixed(2) : String(h);
     notify(NOTIFY.fireHeight, `Height: ${val}×`, { coalesce: true });
   });
-
   on('fire.height.step', (payload) => {
     let index, total;
     if (payload && typeof payload === 'object') ({ index, total } = payload);
     else {
-      try {
-        ({ index, total } = JSON.parse(payload));
-      } catch {
-        /* ignore malformed JSON payloads */
-      }
+      try { ({ index, total } = JSON.parse(payload)); } catch {}
     }
     if (Number.isFinite(index) && Number.isFinite(total)) {
       notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
@@ -539,22 +520,50 @@ function wireBus(on) {
     const val = typeof f === 'number' && f.toFixed ? f.toFixed(0) : String(f);
     notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
   });
-
   on('fire.fuel.step', (payload) => {
     let index, total;
     if (payload && typeof payload === 'object') ({ index, total } = payload);
     else {
-      try {
-        ({ index, total } = JSON.parse(payload));
-      } catch {
-        /* ignore malformed JSON payloads */
-      }
+      try { ({ index, total } = JSON.parse(payload)); } catch {}
     }
     if (Number.isFinite(index) && Number.isFinite(total)) {
       notify(NOTIFY.fireFuel, `Fuel: ${index}/${total}`, { coalesce: true });
     }
   });
+
+  // --- Rain intensity (NEW) ---
+  // Numeric + step (X/N), mirroring Fire
+  on('rain.tail', (m) => {
+    const val = typeof m === 'number' && m.toFixed ? m.toFixed(2) : String(m);
+    notify(NOTIFY.rainTail, `Tail: ${val}×`, { coalesce: true });
+  });
+  on('rain.tail.step', (payload) => {
+    let index, total;
+    if (payload && typeof payload === 'object') ({ index, total } = payload);
+    else {
+      try { ({ index, total } = JSON.parse(payload)); } catch {}
+    }
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.rainTail, `Tail: ${index}/${total}`, { coalesce: true });
+    }
+  });
+
+  on('rain.spawn', (p) => {
+    const val = typeof p === 'number' && p.toFixed ? p.toFixed(0) : String(p);
+    notify(NOTIFY.rainSpawn, `Spawn: ${val}%`, { coalesce: true });
+  });
+  on('rain.spawn.step', (payload) => {
+    let index, total;
+    if (payload && typeof payload === 'object') ({ index, total } = payload);
+    else {
+      try { ({ index, total } = JSON.parse(payload)); } catch {}
+    }
+    if (Number.isFinite(index) && Number.isFinite(total)) {
+      notify(NOTIFY.rainSpawn, `Spawn: ${index}/${total}`, { coalesce: true });
+    }
+  });
 }
+
 
 /**
  * Dev helper to expose API to window (optional).

@@ -1,42 +1,73 @@
 // src/js/modes/digitalrain.js
 /* eslint-env browser */
 
+import { emit } from '../state.js';
+
 /**
  * Program: DigitalRain
  * Genre: Rain
  * Style: Katakana streams with soft trail
  * Purpose: Vertical glyph streams that advance on a fixed tick.
+ *
+ * Intensity hotkeys (hold Shift):
+ *   ↑ / ↓  -> tail length (staged multiplier)
+ *   → / ←  -> respawn probability (staged via index)
  */
 export const digitalrain = (() => {
-  const GLYPHS = Array.from({ length: 96 }, (_, i) => String.fromCharCode(0x30a0 + (i % 96)));
+  const GLYPHS = Array.from({ length: 96 }, (_, i) =>
+    String.fromCharCode(0x30a0 + (i % 96))
+  );
 
-  // state
-  let cols = 0,
-    drops = [],
-    fontSize = 16;
-  let running = false,
-    tickAcc = 0,
-    tickMs = 75;
-
+  // ----- utils -----
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
-  /**
-   * Compute column count and seed drops.
-   * @param {*} ctx - Render context with {w,h,dpr}.
-   * @returns {void}
-   */
+  // ----- intensity STAGES (1..10; index 0 unused) -----
+  // Tail multiplier stages (bigger = longer trail; fade less)
+  const TAIL_STAGES = [0, 0.01, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25];
+  let tailIndex = 5; // default 1.00×
+  let TAIL_MULT = TAIL_STAGES[tailIndex];
+
+  // Spawn probability stages (probabilities 0..1)
+  const SPAWN_STAGES = [0, 0.005, 0.010, 0.020, 0.030, 0.050, 0.075, 0.100, 0.150, 0.200, 0.225];
+  let spawnIndex = 5; // default ≈5%
+  let RESPAWN_P = SPAWN_STAGES[spawnIndex];
+
+  const clampStep = (i) => Math.max(1, Math.min(10, Math.round(i)));
+
+  // Snap any numeric multiplier to nearest tail stage
+  const snapToTailIndex = (mult) => {
+    if (!Number.isFinite(mult)) return tailIndex;
+    let bestIdx = 1, best = Infinity;
+    for (let i = 1; i <= 10; i++) {
+      const d = Math.abs(TAIL_STAGES[i] - mult);
+      if (d < best) { best = d; bestIdx = i; }
+    }
+    return bestIdx;
+  };
+
+  // HUD step toasts
+  const emitTailStep  = () => emit('rain.tail.step',  { index: tailIndex,  total: 10 });
+  const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
+
+  // ----- state -----
+  let cols = 0, fontSize = 16;
+  /** @type {number[]} */ let drops = [];
+  let running = false, tickAcc = 0, tickMs = 75;
+
+  // one-time guards
+  let wiredBus = false;
+  let keysBound = false;
+
+  // ----- layout / seed -----
   function calc(ctx) {
     fontSize = Math.max(12, Math.floor(0.02 * Math.min(ctx.w, ctx.h)));
     cols = Math.floor(ctx.w / ctx.dpr / fontSize);
     drops = new Array(cols).fill(0).map(() => Math.floor(Math.random() * -40));
   }
 
-  /**
-   * Initialize DPR-safe canvas defaults and compute layout.
-   * @param {*} ctx - Render context.
-   * @returns {void}
-   */
+  // ----- lifecycle -----
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -45,65 +76,138 @@ export const digitalrain = (() => {
     g.shadowBlur = 0;
     g.shadowColor = 'rgba(0,0,0,0)';
     calc(ctx);
+
+    // Single authoritative bus wiring
+    if (!wiredBus) {
+      const bus = (window.app && window.app.events) || window.events;
+      if (bus?.on) {
+        // Tail: accept raw multiplier or { index }
+        bus.on('rain.tail', (m) => {
+          if (m && typeof m === 'object' && Number.isFinite(m.index)) {
+            tailIndex = clampStep(m.index);
+          } else {
+            tailIndex = snapToTailIndex(Number(m));
+          }
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emitTailStep();
+        });
+
+        // Spawn: accept OBJECT { index } as the control signal (ignore numeric %)
+        bus.on('rain.spawn', (payload) => {
+          if (!(payload && typeof payload === 'object' && Number.isFinite(payload.index))) return;
+          spawnIndex = clampStep(payload.index);
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+
+          // Drive HUD toasts ourselves
+          emit('rain.spawn', Math.round(RESPAWN_P * 100)); // numeric % toast
+          emitSpawnStep();                                 // X/N toast
+        });
+      }
+      wiredBus = true;
+    }
+
+    // Ensure derived values and show baseline toasts once
+    TAIL_MULT = TAIL_STAGES[tailIndex];
+    RESPAWN_P = SPAWN_STAGES[spawnIndex];
+    emitTailStep();
+    emitSpawnStep();
   }
 
-  /**
-   * Recompute on geometry/DPR change.
-   * @param {*} ctx - Render context.
-   * @returns {void}
-   */
-  function resize(ctx) {
-    init(ctx);
-  }
+  function resize(ctx) { init(ctx); }
 
-  /** Start animation. @returns {void} */
   function start() {
     running = true;
-  }
-  /** Stop animation.  @returns {void} */
-  function stop() {
-    running = false;
+    if (!keysBound) {
+      window.addEventListener('keydown', onKey, { passive: false });
+      keysBound = true;
+    }
   }
 
-  /**
-   * Clear canvas & reset drops.
-   * @param {*} ctx - Render context.
-   * @returns {void}
-   */
+  function stop() {
+    running = false;
+    if (keysBound) {
+      window.removeEventListener('keydown', onKey);
+      keysBound = false;
+    }
+  }
+
   function clear(ctx) {
     drops = [];
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
-  // --- speed mapping (DigitalRain) ---
-  /**
-   * Update the stream tick cadence from the global speed multiplier.
-   * 1.0× keeps ~75ms between row steps; higher = faster (smaller tickMs).
-   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
-   * @returns {void}
-   */
+  // ----- speed mapping -----
   function applySpeed(mult) {
-    const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1)); // global 0.4–1.6
-    // Keep 75ms @ 1.0× as the midpoint; faster multipliers reduce the delay
+    const m = clamp(Number(mult) || 1, 0.4, 1.6);
     tickMs = Math.max(16, Math.round(75 / m));
   }
 
-  /**
-   * Draw one frame; advance when running and not paused.
-   * @param {*} ctx - {ctx2d,dpr,w,h,elapsed,paused,speed}
-   * @returns {void}
-   */
+  // ----- hotkeys: Shift+Arrows -----
+  function onKey(e) {
+    if (!e.shiftKey) return;
+    let handled = false;
+    switch (e.key) {
+      case 'ArrowUp': {
+        if (tailIndex < 10) {
+          tailIndex += 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT)); // numeric HUD toast
+          emitTailStep();                       // X/N HUD toast
+        }
+        handled = true;
+        break;
+      }
+      case 'ArrowDown': {
+        if (tailIndex > 1) {
+          tailIndex -= 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT));
+          emitTailStep();
+        }
+        handled = true;
+        break;
+      }
+      case 'ArrowRight': {
+        if (spawnIndex < 10) {
+          spawnIndex += 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          // authoritative index signal; HUD toasts emitted in bus handler
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
+        handled = true;
+        break;
+      }
+      case 'ArrowLeft': {
+        if (spawnIndex > 1) {
+          spawnIndex -= 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
+        handled = true;
+        break;
+      }
+    }
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
+  // ----- frame -----
   function frame(ctx) {
     const g = ctx.ctx2d;
     tickAcc += ctx.elapsed;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
-    // NEW: apply per-mode speed from global multiplier
+    // Apply per-mode speed
     applySpeed(ctx.speed);
 
-    // trail fade
-    g.fillStyle = 'rgba(0,0,0,0.08)';
+    // Trail fade: divide base alpha by TAIL_MULT (bigger tail => weaker fade)
+    const BASE_FADE = 0.08;
+    const MIN_FADE = 0.02, MAX_FADE = 0.20;
+    const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
+    g.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
     g.fillRect(0, 0, W, H);
 
     // draw streams
@@ -122,11 +226,10 @@ export const digitalrain = (() => {
 
       if (!doAdvance) continue;
 
-      if (y > H && Math.random() > 0.975) {
-        drops[i] = Math.floor(-20 * Math.random());
+      if (y > H && Math.random() < RESPAWN_P) {
+        drops[i] = Math.floor(-20 * Math.random()); // restart above top
       } else {
-        // one row per tick; speed is handled by tickMs now
-        drops[i] += 1;
+        drops[i] += 1; // one row per tick; speed via tickMs
       }
     }
   }
