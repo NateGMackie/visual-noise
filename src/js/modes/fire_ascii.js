@@ -1,5 +1,16 @@
-// src/js/modes/fire_ascii.js
 /* eslint-env browser */
+/** @typedef {unknown} CanvasRenderingContext2D */
+/** @typedef {unknown} KeyboardEvent */
+/**
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-scaled)
+ * @property {number} w - Canvas width in device pixels
+ * @property {number} h - Canvas height in device pixels
+ * @property {number} dpr - Device pixel ratio
+ * @property {number} [elapsed] - Time since last frame (ms)
+ * @property {boolean} [paused] - Whether animation is paused
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6)
+ */
 
 /**
  * Program: FireAscii
@@ -25,11 +36,6 @@ export const fireAscii = (() => {
     max: 12,
     step: 1,
     default: 6,
-    /**
-     * Map UI speed index (1–12) to simulation parameters.
-     * @param {number} [idx] - Speed index; higher = hotter.
-     * @returns {{emberChance:number, coolBase:number}} - New-ember probability and base cooling per step.
-     */
     map(idx = 6) {
       idx = Math.max(this.min, Math.min(this.max, idx));
       const emberChance = 0.35 + (idx - 1) * (0.45 / (this.max - 1)); // ~0.35 → ~0.80
@@ -42,6 +48,18 @@ export const fireAscii = (() => {
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
+  // ---------- Height Intensity (staged 1..10) ----------
+  // 1/10 ≈ 10% screen, 5/10 ≈ ~50% screen, 10/10 ≈ full screen feel.
+  // We apply a cooling band near a per-column, wavy cutoff for natural tips.
+  const HEIGHT_FRAC = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.65, 0.8, 0.9, 0.95, 1.0]; // index 0 unused
+  const HEIGHT_STEPS_TOTAL = 10;
+  let heightIndex = 5; // default ~half screen
+  const clampStep = (i) => Math.max(1, Math.min(10, Math.round(i)));
+  const emitHeightStep = () => {
+    const bus = (window.app && window.app.events) || window.events;
+    bus?.emit?.('fire.height.step', { index: heightIndex, total: HEIGHT_STEPS_TOTAL });
+  };
+
   // --- coarse grid state ---
   let Wc = 0,
     Hc = 0; // coarse grid width/height (in cells)
@@ -49,9 +67,17 @@ export const fireAscii = (() => {
   let heat = null; // heat per cell 0..255
   let running = false;
 
-  // cached params (from speed model)
+  // cached params (from speed model / global speed)
   let emberChance = 0.5;
   let coolBase = 3.0;
+
+  // Per-column phase for a wavy top edge (updated each frame)
+  /** @type {Float32Array|null} */
+  let ceilPhase = null;
+
+  // one-time guards
+  let wiredBus = false;
+  let keysBound = false;
 
   /**
    * Rebuild coarse grid & buffers based on canvas size.
@@ -64,6 +90,10 @@ export const fireAscii = (() => {
     Wc = Math.max(20, Math.floor(cssW / SCALE_X));
     Hc = Math.max(12, Math.floor(cssH / SCALE_Y));
     heat = new Uint8Array(Wc * Hc);
+
+    // init per-column wave phases
+    ceilPhase = new Float32Array(Wc);
+    for (let x = 0; x < Wc; x++) ceilPhase[x] = Math.random() * Math.PI * 2;
   }
 
   /**
@@ -88,12 +118,29 @@ export const fireAscii = (() => {
   function init(ctx) {
     resetCanvasState(ctx);
     rebuild(ctx);
+
+    // Single authoritative bus wiring (optional external control)
+    if (!wiredBus) {
+      const bus = (window.app && window.app.events) || window.events;
+      if (bus?.on) {
+        // Accept {index} to set the height stage directly
+        bus.on('fire.height.idx', (payload) => {
+          const idx = payload && typeof payload === 'object' ? payload.index : payload;
+          if (!Number.isFinite(idx)) return;
+          heightIndex = clampStep(idx);
+          emitHeightStep();
+        });
+      }
+      wiredBus = true;
+    }
+
+    // Show baseline step on entry
+    emitHeightStep();
   }
 
   /**
    * Handle DPR/viewport changes (rebuild grid).
-   * Handle DPR/viewport changes (rebuild grid).
-   * @param {*} ctx - Render context with {ctx2d,dpr,w,h}.
+   * @param {RenderCtx} ctx - Render context with current size and DPR.
    * @returns {void}
    */
   function resize(ctx) {
@@ -103,14 +150,21 @@ export const fireAscii = (() => {
   /** Start simulation. @returns {void} */
   function start() {
     running = true;
+    if (!keysBound) {
+      window.addEventListener('keydown', onKey, { passive: false });
+      keysBound = true;
+    }
   }
   /** Stop simulation.  @returns {void} */
   function stop() {
     running = false;
+    if (keysBound) {
+      window.removeEventListener('keydown', onKey);
+      keysBound = false;
+    }
   }
 
   /**
-   * Clear heat field and canvas.
    * Clear heat field and canvas.
    * @param {*} ctx - Render context with {ctx2d,dpr,w,h}.
    * @returns {void}
@@ -125,20 +179,16 @@ export const fireAscii = (() => {
   }
 
   /**
-   * Update the fire parameters based on the global speed multiplier.
-   * Higher speed increases ember spawn chance and reduces cooling.
-   * @param {*} ctx - Render context containing the `speed` multiplier (≈0.4–1.6).
+   * Update ember/cooling from the global speed multiplier (≈0.4–1.6).
+   * Height is applied later via HEIGHT_FRAC (staged).
+   * @param {RenderCtx} ctx - Render context containing the current speed multiplier.
    * @returns {void}
    */
   function applySpeed(ctx) {
-    // Global multiplier 0.4..1.6; normalize to 0..1
     const m = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
     const t = (m - 0.4) / (1.6 - 0.4); // 0..1
 
-    // Rebuild emberChance/cooling from multiplier so 1.0× is your "just right"
-    // These ranges match the feel of your old index mapping:
-    // emberChance: 0.25 → 0.60 across the range
-    // coolBase   : 0.70 → 1.20 across the range
+    // Base ranges (feel similar to your previous mapping)
     const emberMin = 0.25,
       emberMax = 0.6;
     const coolMin = 0.7,
@@ -146,6 +196,38 @@ export const fireAscii = (() => {
 
     emberChance = emberMin + t * (emberMax - emberMin);
     coolBase = coolMin + t * (coolMax - coolMin);
+  }
+
+  /**
+   * Shift+Up/Down → heightIndex (1..10). Emits fire.height.step for HUD.
+   * @param {KeyboardEvent} e - Keyboard event from window; only handles Shift+Arrow keys.
+   * @returns {void}
+   */
+  function onKey(e) {
+    if (!e.shiftKey) return;
+    let handled = false;
+    switch (e.key) {
+      case 'ArrowUp': {
+        if (heightIndex < 10) {
+          heightIndex += 1;
+          emitHeightStep();
+        }
+        handled = true;
+        break;
+      }
+      case 'ArrowDown': {
+        if (heightIndex > 1) {
+          heightIndex -= 1;
+          emitHeightStep();
+        }
+        handled = true;
+        break;
+      }
+    }
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }
 
   /**
@@ -157,6 +239,22 @@ export const fireAscii = (() => {
     // Ensure grid exists even if init/resize didn’t run yet.
     if (!Wc || !Hc || !heat) rebuild(ctx);
     applySpeed(ctx);
+
+    // --- Height shaping (natural tips) ---
+    // heightFrac in [0.10..1.00]; higher → taller flames.
+    const heightFrac = HEIGHT_FRAC[heightIndex];
+
+    // Global cutoff row and smoothing band
+    const cutoffRow = Math.floor((1 - heightFrac) * (Hc - 1));
+    const bandRows = Math.max(2, Math.floor(0.12 * Hc)); // smoothing band thickness
+    const bandStrength = (1 - heightFrac) * 10; // extra cooling strength
+
+    // Drift the per-column phase so the top wiggles
+    if (ceilPhase && ceilPhase.length === Wc) {
+      for (let x = 0; x < Wc; x++) {
+        ceilPhase[x] += 0.03 + 0.02 * Math.random(); // tiny, jittery
+      }
+    }
 
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
@@ -171,7 +269,10 @@ export const fireAscii = (() => {
 
       // 2) Diffuse upward with lateral jitter, cooling, and occasional 2-row hop
       for (let y = 0; y < Hc - 1; y++) {
-        const liftHere = 0.3 + 0.2 * (1 - y / (Hc - 1)); // 0.50 → 0.30
+        const baseLift = 0.3 + 0.2 * (1 - y / (Hc - 1)); // 0.50 → 0.30
+        const hopBoost = 0.06 * (heightFrac - 0.5); // subtle extra lift at high stages
+        const liftHere = Math.max(0.2, Math.min(0.7, baseLift + hopBoost));
+
         for (let x = 0; x < Wc; x++) {
           const rx = (x + (((Math.random() * 3) | 0) - 1) + Wc) % Wc;
           const hop = Math.random() < liftHere && y + 2 < Hc ? 2 : 1;
@@ -179,10 +280,33 @@ export const fireAscii = (() => {
 
           const coolJitter = (Math.random() * 2) | 0; // 0..1
           const coolTaper = 0.95 - 0.05 * (y / (Hc - 1)); // 0.95 → 0.90
-          const cool = Math.max(1, (coolBase - 0.4 + coolJitter) * coolTaper);
+
+          // Per-column local cutoff: gently undulate the top band
+          const localCutoff = Math.max(
+            0,
+            Math.min(
+              Hc - 1,
+              cutoffRow + Math.floor(bandRows * 0.6 * Math.sin(ceilPhase ? ceilPhase[x] : 0))
+            )
+          );
+
+          // Smooth 0→1 ramp ABOVE the local cutoff (toward the top)
+          const tLocal = (localCutoff - y) / bandRows;
+          const rampLocal = tLocal <= 0 ? 0 : tLocal >= 1 ? 1 : tLocal;
+
+          // base cooling + local extra band cooling
+          const coolEff = Math.max(
+            1,
+            (coolBase - 0.4 + coolJitter) * coolTaper + bandStrength * rampLocal
+          );
 
           const i = y * Wc + x;
-          heat[i] = below > cool ? below - cool : 0;
+          let h = below > coolEff ? below - coolEff : 0;
+
+          // Soft fade near/above the band (no “flat wall”)
+          h = (h * (1 - 0.65 * rampLocal)) | 0;
+
+          heat[i] = h;
         }
       }
     }
