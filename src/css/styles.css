@@ -8,6 +8,7 @@
   --controls-transition: 240ms ease;
   --controls-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   --controls-safe-pad: 0px; /* can be used if you want extra breathing room */
+  
 }
 
 html,

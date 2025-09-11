@@ -13,7 +13,7 @@ export const matrix = (() => {
 
   // --- visuals ---
   const TRAIL_COLOR = '#00d18f';
-  const HEAD_COLOR = '#B1FFE0';
+  const HEAD_COLOR = '#fff';
   const GLOW_COLOR = '#03FFAF';
 
   // -----------------------------
