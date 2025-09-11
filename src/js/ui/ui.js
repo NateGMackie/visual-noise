@@ -12,8 +12,9 @@ import {
 } from '../state.js';
 import { registry } from '../modes/index.js';
 import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
-// NOTE: also import syncAwakeButton so we can refresh the Awake label after hotkey toggle
 import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
+import { installHotkeys } from './hotkeys.js';
+import { WakeLock } from '../lib/wake_lock.js';
 
 // --- ControlsVisibility shim ---
 // Aligns with styles.css (#controls.is-visible + body.has-controls-visible)
@@ -171,6 +172,9 @@ export function initUI() {
   };
   const setThemeLabel = (name) => {
     if (themeName) themeName.textContent = name;
+    if (themeName && typeof name === 'string') {
+      themeName.dataset.vibe = name;
+    }
   };
 
   // Keep legacy small buttons working if present
@@ -203,14 +207,14 @@ export function initUI() {
     };
   }
 
-  // --- Keyboard shortcuts ---
-  window.addEventListener('keydown', (e) => {
-    if (e.repeat) return;
-    const tag = document.activeElement?.tagName?.toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+  // -------- Hotkeys (centralized) --------
 
+  // Helpers to compute family/style groupings from labels
+  const computeMeta = () => {
     const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
-    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || '')));
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(
+      Boolean
+    );
     const byFamily = familyList.map((fam) => ({
       family: fam,
       modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
@@ -220,111 +224,118 @@ export function initUI() {
     const curType = meta[currentMode]?.typeLabel || '';
     const famIdx = Math.max(0, familyList.indexOf(curFam));
     const typesInFam = Array.from(
-      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
-    );
+      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || '')).values()
+    ).filter(Boolean);
+    return { meta, familyList, byFamily, famIdx, curType, typesInFam };
+  };
 
-    const setModeByIndex = (idx) => {
-      if (!modes.length) return;
-      const i = Math.max(0, Math.min(idx, modes.length - 1));
-      setMode(modes[i]);
+  const selectModeByIndex = (idx) => {
+    if (!modes.length) return;
+    const i = Math.max(0, Math.min(idx, modes.length - 1));
+    setMode(modes[i]);
+    setModeLabel();
+  };
+
+  const cycleFamily = (dir) => {
+    const { meta, familyList, byFamily, famIdx, curType } = computeMeta();
+    if (!familyList.length) return;
+    const nextFamIdx = (famIdx + (dir > 0 ? 1 : familyList.length - 1)) % familyList.length;
+    const nextFamily = byFamily[nextFamIdx];
+    if (!nextFamily || !nextFamily.modes.length) return;
+
+    // Prefer same type within new family
+    const candidate =
+      nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) || nextFamily.modes[0];
+    if (candidate) {
+      setMode(candidate);
       setModeLabel();
-    };
-    const setThemeByIndex = (idx) => {
-      const total = Array.isArray(themeNames) ? themeNames.length : 0;
-      if (total && typeof setThemeByName === 'function') {
-        const i = Math.max(0, Math.min(idx, total - 1));
-        const name = themeNames[i];
-        setThemeByName(name);
-        setThemeLabel(name);
-      } else {
-        console.info('[ui] Theme API unavailable for direct selection');
-      }
-    };
-    const indexFromCode = (ev) => {
-      const c = ev.code || '';
-      let n = null;
-      if (c.startsWith('Digit')) n = c.slice(5);
-      else if (c.startsWith('Numpad')) n = c.slice(6);
-      if (n === null) return null;
-      if (!/^[0-9]$/.test(n)) return null;
-      return n === '0' ? 9 : parseInt(n, 10) - 1;
-    };
-
-    const idx = indexFromCode(e);
-    if (idx !== null) {
-      e.preventDefault();
-      if (e.shiftKey) setThemeByIndex(idx);
-      else setModeByIndex(idx);
-      return;
     }
+  };
+
+  const cycleFlavor = (dir) => {
+    const { meta, byFamily, famIdx, curType, typesInFam } = computeMeta();
+    if (!typesInFam.length) return;
+    const typeIdx = Math.max(0, typesInFam.indexOf(curType));
+    const nextType =
+      typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
+    const candidate =
+      byFamily[famIdx].modes.find((m) => meta[m]?.typeLabel === nextType) ||
+      byFamily[famIdx].modes[0];
+    if (candidate) {
+      setMode(candidate);
+      setModeLabel();
+    }
+  };
+
+  const selectModeNum = (n) => {
+    // Map 1..10 to index 0..9
+    const idx = Math.max(1, Math.min(n, 10)) - 1;
+    selectModeByIndex(idx);
+  };
+
+  const cycleVibe = (dir) => {
+    if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function') {
+      const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
+      const idx = Math.max(0, themeNames.indexOf(cur));
+      const next = themeNames[(idx + (dir > 0 ? 1 : -1) + themeNames.length) % themeNames.length];
+      setThemeByName(next);
+      setThemeLabel(next);
+    } else {
+      cycleTheme();
+    }
+  };
+
+  const toggleControls = () => {
+    // Use toggle (help text says "m (toggle)")
+    window.ControlsVisibility?.toggle?.();
+  };
+
+  const toggleAwake = async () => {
+  const on = !!WakeLock.isEnabled();
+  let next = false;
+  if (on) {
+    WakeLock.disable();
+    next = false;
+  } else {
+    next = (await WakeLock.enable()) === true;
+    if (!next) WakeLock.disable();
+  }
+
+  // Safely persist to localStorage if available
+  try {
+    const LS = globalThis.localStorage || window.localStorage;
+    LS?.setItem?.('vn.keepAwake', next ? '1' : '0');
+  } catch {
+    // Ignore storage errors (e.g., privacy mode, quota exceeded)
+  }
+
+  // notify + refresh button label
+  window.app?.events?.emit?.('power', next);
+  syncAwakeButton();
+};
+
+
+  // Install centralized hotkeys (includes Shift+A)
+  installHotkeys({
+    cycleFamily,
+    cycleFlavor,
+    selectModeNum,
+    cycleTheme: cycleVibe,
+    toggleControls,
+    setHudHelp: (html) => {
+      const el = document.getElementById('hudHelp');
+      if (el) el.innerHTML = html;
+    },
+    toggleAwake,
+  });
+
+  // --- Minimal supplemental keys not handled by hotkeys.js ---
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
 
     const k = e.key?.toLowerCase?.();
-    const code = e.code;
-
-    if (k === 'm') {
-      e.preventDefault();
-      window.ControlsVisibility?.show?.();
-      return;
-    }
-
-    if (k === 't') {
-      e.preventDefault();
-      if (Array.isArray(themeNames) && themeNames.length && typeof setThemeByName === 'function') {
-        const cur = (themeName?.dataset?.vibe || cfg.theme || '').trim();
-        let i = Math.max(0, themeNames.indexOf(cur));
-        i = e.shiftKey
-          ? (i - 1 + themeNames.length) % themeNames.length
-          : (i + 1) % themeNames.length;
-        const next = themeNames[i];
-        setThemeByName(next);
-        setThemeLabel(next);
-      } else {
-        cycleTheme();
-      }
-      return;
-    }
-
-    const isLeft =
-      !e.shiftKey && (k === '[' || code === 'BracketLeft' || k === ',' || code === 'Comma');
-    const isRight =
-      !e.shiftKey && (k === ']' || code === 'BracketRight' || k === '.' || code === 'Period');
-
-    const isFlavorLeft =
-      e.shiftKey && (k === '{' || code === 'BracketLeft' || k === ';' || code === 'Semicolon');
-    const isFlavorRight =
-      e.shiftKey && (k === '}' || code === 'BracketRight' || k === "'" || code === 'Quote');
-
-    if (isLeft || isRight) {
-      e.preventDefault();
-      const dir = isRight ? +1 : -1;
-      const nextFamIdx = (famIdx + (dir > 0 ? 1 : familyList.length - 1)) % familyList.length;
-      const nextFamily = byFamily[nextFamIdx];
-      const keepType = curType;
-      const candidate =
-        nextFamily.modes.find((m) => meta[m]?.typeLabel === keepType) || nextFamily.modes[0];
-      if (candidate) {
-        setMode(candidate);
-        setModeLabel();
-      }
-      return;
-    }
-
-    if (isFlavorLeft || isFlavorRight) {
-      e.preventDefault();
-      const dir = isFlavorRight ? +1 : -1;
-      if (!typesInFam.length) return;
-      const typeIdx = Math.max(0, typesInFam.indexOf(curType));
-      const nextType =
-        typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
-      const candidate =
-        byFamily[famIdx].modes.find((m) => meta[m]?.typeLabel === nextType) ||
-        byFamily[famIdx].modes[0];
-      if (candidate) {
-        setMode(candidate);
-        setModeLabel();
-      }
-      return;
-    }
 
     if (k === 'f') {
       e.preventDefault();
@@ -346,19 +357,6 @@ export function initUI() {
     } else if (k === 'c') {
       e.preventDefault();
       clearAll();
-    } else if (k === 'a') {
-      // NEW: Keep Awake toggle via hotkey (delegates to the menu's button)
-      e.preventDefault();
-      const btn = document.getElementById('awakeBtn');
-      if (btn) {
-        btn.click(); // menu handles async enable/disable + notifications + persistence
-        // Immediately refresh the label so it feels instant
-        try {
-          syncAwakeButton?.();
-        } catch (err) {
-          void err;
-        }
-      }
     }
   });
 
