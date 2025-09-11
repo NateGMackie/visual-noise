@@ -3,6 +3,27 @@
 
 import { emit } from '../state.js';
 
+// Local aliases for DOM types so jsdoc/no-undefined-types passes even without DOM lib types.
+/** @typedef {unknown} CanvasRenderingContext2D */
+/** @typedef {unknown} KeyboardEvent */
+
+/**
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (already DPR-scaled).
+ * @property {number} w - Canvas width in device pixels.
+ * @property {number} h - Canvas height in device pixels.
+ * @property {number} dpr - Device pixel ratio used for scaling.
+ * @property {number} [elapsed] - Time since last frame (ms).
+ * @property {boolean} [paused] - Whether animation is paused.
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6).
+ */
+
+/**
+ * @typedef {object} GlyphOpts
+ * @property {boolean} isHead - If true, draw glowing head; otherwise draw trail glyph.
+ * @property {number} [alpha] - 0..1 opacity for trail glyphs (ignored for heads).
+ */
+
 export const matrix = (() => {
   // --- glyphs ---
   const KATAKANA =
@@ -20,12 +41,12 @@ export const matrix = (() => {
   // Intensity controls (STAGES)
   // -----------------------------
   // Tail multiplier stages 1..10 (index 0 unused)
-  const TAIL_STAGES = [0, 0.01, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25];
+  const TAIL_STAGES = [0, 0.01, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25];
   let tailIndex = 5; // default 1.00×
   let TAIL_MULT = TAIL_STAGES[tailIndex];
 
   // Spawn probability stages 1..10 (0..1)
-  const SPAWN_STAGES = [0, 0.005, 0.010, 0.020, 0.030, 0.050, 0.075, 0.100, 0.150, 0.200, 0.225];
+  const SPAWN_STAGES = [0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.225];
   let spawnIndex = 5; // default ~5%
   let RESPAWN_P = SPAWN_STAGES[spawnIndex];
 
@@ -33,16 +54,20 @@ export const matrix = (() => {
 
   const snapToTailIndex = (mult) => {
     if (!Number.isFinite(mult)) return tailIndex;
-    let bestIdx = 1, best = Infinity;
+    let bestIdx = 1,
+      best = Infinity;
     for (let i = 1; i <= 10; i++) {
       const d = Math.abs(TAIL_STAGES[i] - mult);
-      if (d < best) { best = d; bestIdx = i; }
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+      }
     }
     return bestIdx;
   };
 
   // HUD step toasts (X/N only — no % to avoid collisions)
-  const emitTailStep  = () => emit('rain.tail.step',  { index: tailIndex,  total: 10 });
+  const emitTailStep = () => emit('rain.tail.step', { index: tailIndex, total: 10 });
   const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
 
   // -----------------------------
@@ -51,8 +76,11 @@ export const matrix = (() => {
   let wiredBus = false;
   let keysBound = false;
 
-  let cols = 0, rows = 0;
-  let cellW = 10, cellH = 16, fontSize = 14;
+  let cols = 0,
+    rows = 0;
+  let cellW = 10,
+    cellH = 16,
+    fontSize = 14;
   /** @type {Array<{y:number,speed:number,trail:number,charset:string}>} */
   let columns = [];
   let running = false;
@@ -60,15 +88,33 @@ export const matrix = (() => {
   // -----------------------------
   // Utils
   // -----------------------------
+  /**
+   * Convert a hex color like "#03FFAF" or "#fff" to "r, g, b".
+   * @param {string} hex - Hex color string with or without leading '#'.
+   * @returns {string} Comma-separated RGB triple (e.g., "3, 255, 175").
+   */
   function hexToRgb(hex) {
     const h = hex.replace('#', '');
-    const v = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16);
+    const v = parseInt(
+      h.length === 3
+        ? h
+            .split('')
+            .map((x) => x + x)
+            .join('')
+        : h,
+      16
+    );
     return `${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}`;
   }
 
   // -----------------------------
   // Layout / seed
   // -----------------------------
+  /**
+   * Compute font metrics, grid dimensions, and seed column state.
+   * @param {RenderCtx} ctx - Render context with sizing and 2D canvas.
+   * @returns {void}
+   */
   function calc(ctx) {
     fontSize = Math.max(12, Math.floor(0.02 * Math.min(ctx.w, ctx.h)));
     const g = ctx.ctx2d;
@@ -93,6 +139,12 @@ export const matrix = (() => {
   // -----------------------------
   // Lifecycle
   // -----------------------------
+  /**
+   * Initialize DPR transforms, reset canvas defaults, recompute layout,
+   * and wire the event bus (once).
+   * @param {RenderCtx} ctx - Render context with sizing and 2D canvas.
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -120,7 +172,7 @@ export const matrix = (() => {
         // Spawn: **index-only input** channel (no numeric cross-talk)
         // Any UI control should emit {index} to 'rain.spawn.idx'
         bus.on('rain.spawn.idx', (payload) => {
-          const idx = (payload && typeof payload === 'object') ? payload.index : payload;
+          const idx = payload && typeof payload === 'object' ? payload.index : payload;
           if (!Number.isFinite(idx)) return;
           spawnIndex = clampStep(idx);
           RESPAWN_P = SPAWN_STAGES[spawnIndex];
@@ -140,8 +192,19 @@ export const matrix = (() => {
     emitTailStep();
   }
 
-  function resize(ctx) { init(ctx); }
+  /**
+   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
+   * @param {RenderCtx} ctx - Render context with sizing and 2D canvas.
+   * @returns {void}
+   */
+  function resize(ctx) {
+    init(ctx);
+  }
 
+  /**
+   * Begin animation and bind hotkeys (once).
+   * @returns {void}
+   */
   function start() {
     running = true;
     if (!keysBound) {
@@ -150,6 +213,10 @@ export const matrix = (() => {
     }
   }
 
+  /**
+   * Stop animation and unbind hotkeys.
+   * @returns {void}
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -158,6 +225,11 @@ export const matrix = (() => {
     }
   }
 
+  /**
+   * Clear internal column state and the entire canvas.
+   * @param {RenderCtx} ctx - Render context with sizing and 2D canvas.
+   * @returns {void}
+   */
   function clear(ctx) {
     columns = [];
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
@@ -166,6 +238,15 @@ export const matrix = (() => {
   // -----------------------------
   // Drawing
   // -----------------------------
+  /**
+   * Draw one glyph with head/trail styling.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {string} ch - Single-character glyph to draw.
+   * @param {number} x - X position in CSS pixels.
+   * @param {number} y - Y position in CSS pixels.
+   * @param {GlyphOpts} opts - Head/trail rendering options.
+   * @returns {void}
+   */
   function drawGlyph(g, ch, x, y, opts) {
     const { isHead } = opts;
     if (isHead) {
@@ -185,9 +266,15 @@ export const matrix = (() => {
   }
 
   // Speed mapping (global speed multiplier)
-  const MIN_MUL = 0.4, MAX_MUL = 1.6;
+  const MIN_MUL = 0.4,
+    MAX_MUL = 1.6;
   const clampMul = (m) => Math.max(MIN_MUL, Math.min(MAX_MUL, Number(m) || 1));
 
+  /**
+   * Render one frame of Matrix rain and advance stream positions.
+   * @param {RenderCtx} ctx - Render context including speed/paused flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = Math.floor(ctx.w / ctx.dpr);
@@ -249,6 +336,11 @@ export const matrix = (() => {
   // -----------------------------
   // Hotkeys: Shift+Arrows (with stopPropagation)
   // -----------------------------
+  /**
+   * Handle Shift+Arrow intensity hotkeys for tails/spawn.
+   * @param {KeyboardEvent} e - Keyboard event from window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     let handled = false;

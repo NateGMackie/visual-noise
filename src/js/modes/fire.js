@@ -1,5 +1,18 @@
 // src/js/modes/fire.js
-import { clamp } from '../lib/index.js';
+
+/** @typedef {unknown} CanvasRenderingContext2D */
+/** @typedef {unknown} KeyboardEvent */
+/**
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-scaled)
+ * @property {number} w - Canvas width in device pixels
+ * @property {number} h - Canvas height in device pixels
+ * @property {number} dpr - Device pixel ratio
+ * @property {number} [elapsed] - Time since last frame (ms)
+ * @property {boolean} [paused] - Whether animation is paused
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6)
+ */
+
 import { emit } from '../state.js';
 
 /**
@@ -28,26 +41,22 @@ export const fire = (() => {
 
   // ---------- staged intensity (index 0 unused) ----------
   // Height boost range (1.0 .. 1.8) → 10 stages
-  const HEIGHT_STAGES = [0,
-    1.00, 1.09, 1.18, 1.27, 1.36, 1.45, 1.54, 1.63, 1.72, 1.80
-  ];
+  const HEIGHT_STAGES = [0, 1.0, 1.09, 1.18, 1.27, 1.36, 1.45, 1.54, 1.63, 1.72, 1.8];
   // Fuel fraction range (0.05 .. 0.25) → 10 stages
-  const FUEL_STAGES = [0,
-    0.05, 0.072, 0.094, 0.116, 0.138, 0.160, 0.182, 0.204, 0.226, 0.250
-  ];
+  const FUEL_STAGES = [0, 0.05, 0.072, 0.094, 0.116, 0.138, 0.16, 0.182, 0.204, 0.226, 0.25];
 
   const clampStep = (i) => Math.max(1, Math.min(10, Math.round(i)));
 
   // active stage indices + derived values
-  let heightIndex = 5;                   // default ~1.36
+  let heightIndex = 5; // default ~1.36
   let HEIGHT_BOOST = HEIGHT_STAGES[heightIndex];
 
-  let fuelIndex = 5;                     // default ~0.138 (13.8%)
+  let fuelIndex = 5; // default ~0.138 (13.8%)
   let FUEL_ROWS_FRAC = FUEL_STAGES[fuelIndex];
 
   // step toasts
   const emitHeightStep = () => emit('fire.height.step', { index: heightIndex, total: 10 });
-  const emitFuelStep   = () => emit('fire.fuel.step',   { index: fuelIndex,   total: 10 });
+  const emitFuelStep = () => emit('fire.fuel.step', { index: fuelIndex, total: 10 });
 
   // ---------- palette ----------
   const PAL = new Array(PALETTE_SIZE);
@@ -57,16 +66,24 @@ export const fire = (() => {
       let r, g, b;
       if (t < 0.25) {
         const k = t / 0.25;
-        r = 20 + 110 * k; g = 0 + 15 * k; b = 0;
+        r = 20 + 110 * k;
+        g = 0 + 15 * k;
+        b = 0;
       } else if (t < 0.5) {
         const k = (t - 0.25) / 0.25;
-        r = 130 + 90 * k; g = 15 + 80 * k; b = 0;
+        r = 130 + 90 * k;
+        g = 15 + 80 * k;
+        b = 0;
       } else if (t < 0.8) {
         const k = (t - 0.5) / 0.3;
-        r = 220 + 35 * k; g = 95 + 130 * k; b = 0;
+        r = 220 + 35 * k;
+        g = 95 + 130 * k;
+        b = 0;
       } else {
         const k = (t - 0.8) / 0.2;
-        r = 255; g = 225 + 30 * k; b = 40 + 60 * k;
+        r = 255;
+        g = 225 + 30 * k;
+        b = 40 + 60 * k;
       }
       PAL[i] = `rgb(${r | 0},${g | 0},${b | 0})`;
     }
@@ -77,7 +94,8 @@ export const fire = (() => {
   const rand = () => (seed = (1664525 * seed + 1013904223) >>> 0) / 4294967296;
 
   // ---------- state ----------
-  let Wc = 0, Hc = 0;    // coarse grid size
+  let Wc = 0,
+    Hc = 0; // coarse grid size
   /** @type {Uint8Array|null} */ let heat = null;
   let running = false;
   let fuelRows = 1;
@@ -86,13 +104,20 @@ export const fire = (() => {
   const dtTarget = 1000 / TARGET_FPS;
   let stepMs = dtTarget;
   const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
-  let lastT = 0, acc = 0;
+  let lastT = 0,
+    acc = 0;
 
   // one-time guards
   let wiredBus = false;
   let keysBound = false;
 
   // ---------- speed mapping ----------
+  /**
+   * Map the global speed multiplier to a fixed-step interval for the sim.
+   * Higher speed → smaller step (faster sim).
+   * @param {RenderCtx} ctx - Render context holding the current `speed` multiplier.
+   * @returns {void}
+   */
   function applySpeed(ctx) {
     const mult = Math.max(0.4, Math.min(1.6, Number(ctx?.speed) || 1));
     const MIN_STEP = 1000 / 90; // max ~90 steps/sec
@@ -100,6 +125,11 @@ export const fire = (() => {
   }
 
   // ---------- geometry ----------
+  /**
+   * Rebuild coarse grid/buffers from canvas size and DPR.
+   * @param {RenderCtx} ctx - Render context with current dimensions/DPR.
+   * @returns {void}
+   */
   function rebuild(ctx) {
     const cssW = ctx.w / ctx.dpr;
     const cssH = ctx.h / ctx.dpr;
@@ -112,6 +142,11 @@ export const fire = (() => {
   }
 
   // ---------- lifecycle ----------
+  /**
+   * Initialize DPR transforms, palette/geometry, and bus wiring.
+   * @param {RenderCtx} ctx - Render context with 2D canvas and sizing.
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -128,7 +163,7 @@ export const fire = (() => {
       if (bus?.on) {
         // Authoritative index channels (no numeric cross-talk)
         bus.on('fire.height.idx', (payload) => {
-          const idx = (payload && typeof payload === 'object') ? payload.index : payload;
+          const idx = payload && typeof payload === 'object' ? payload.index : payload;
           if (!Number.isFinite(idx)) return;
           heightIndex = clampStep(idx);
           HEIGHT_BOOST = HEIGHT_STAGES[heightIndex];
@@ -136,7 +171,7 @@ export const fire = (() => {
         });
 
         bus.on('fire.fuel.idx', (payload) => {
-          const idx = (payload && typeof payload === 'object') ? payload.index : payload;
+          const idx = payload && typeof payload === 'object' ? payload.index : payload;
           if (!Number.isFinite(idx)) return;
           fuelIndex = clampStep(idx);
           FUEL_ROWS_FRAC = FUEL_STAGES[fuelIndex];
@@ -155,8 +190,18 @@ export const fire = (() => {
     emitFuelStep();
   }
 
-  function resize(ctx) { rebuild(ctx); }
+  /**
+   * Handle resize/DPR changes by rebuilding geometry.
+   * @param {RenderCtx} ctx - Render context with updated dimensions/DPR.
+   * @returns {void}
+   */
+  function resize(ctx) {
+    rebuild(ctx);
+  }
 
+  /**
+   *
+   */
   function start() {
     running = true;
     lastT = nowMs();
@@ -166,6 +211,9 @@ export const fire = (() => {
     }
   }
 
+  /**
+   *
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -174,6 +222,11 @@ export const fire = (() => {
     }
   }
 
+  /**
+   * Clear the simulation field and canvas.
+   * @param {RenderCtx} ctx - Render context with 2D canvas.
+   * @returns {void}
+   */
   function clear(ctx) {
     if (heat) heat.fill(0);
     const g = ctx.ctx2d;
@@ -184,11 +237,17 @@ export const fire = (() => {
   }
 
   // ---------- hotkeys (Shift+Arrows) ----------
+  /**
+   * Handle Shift+Arrow hotkeys to adjust height/fuel stages.
+   * @param {KeyboardEvent} e - Keyboard event from window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     let handled = false;
     switch (e.key) {
-      case 'ArrowUp': { // taller flames (next stage)
+      case 'ArrowUp': {
+        // taller flames (next stage)
         if (heightIndex < 10) {
           heightIndex += 1;
           HEIGHT_BOOST = HEIGHT_STAGES[heightIndex];
@@ -197,7 +256,8 @@ export const fire = (() => {
         handled = true;
         break;
       }
-      case 'ArrowDown': { // shorter flames (prev stage)
+      case 'ArrowDown': {
+        // shorter flames (prev stage)
         if (heightIndex > 1) {
           heightIndex -= 1;
           HEIGHT_BOOST = HEIGHT_STAGES[heightIndex];
@@ -206,7 +266,8 @@ export const fire = (() => {
         handled = true;
         break;
       }
-      case 'ArrowRight': { // more fuel (next stage)
+      case 'ArrowRight': {
+        // more fuel (next stage)
         if (fuelIndex < 10) {
           fuelIndex += 1;
           FUEL_ROWS_FRAC = FUEL_STAGES[fuelIndex];
@@ -218,7 +279,8 @@ export const fire = (() => {
         handled = true;
         break;
       }
-      case 'ArrowLeft': { // less fuel (prev stage)
+      case 'ArrowLeft': {
+        // less fuel (prev stage)
         if (fuelIndex > 1) {
           fuelIndex -= 1;
           FUEL_ROWS_FRAC = FUEL_STAGES[fuelIndex];
@@ -237,6 +299,9 @@ export const fire = (() => {
   }
 
   // ---------- simulation ----------
+  /**
+   *
+   */
   function stepSim() {
     fuelRows = Math.max(1, Math.round(Hc * FUEL_ROWS_FRAC));
 
@@ -262,6 +327,11 @@ export const fire = (() => {
   }
 
   // ---------- frame ----------
+  /**
+   * Render one frame and advance the fixed-step simulation.
+   * @param {RenderCtx} ctx - Render context with speed/paused flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
@@ -275,7 +345,7 @@ export const fire = (() => {
     applySpeed(ctx);
 
     // Fixed-step simulation
-    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     let dt = now - lastT;
     if (dt > 250) dt = 250;
     lastT = now;
@@ -331,4 +401,4 @@ export const fire = (() => {
 
   return { init, resize, start, stop, frame, clear };
 })();
-[]
+[];

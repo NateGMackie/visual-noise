@@ -4,6 +4,21 @@
 import { emit } from '../state.js';
 
 /**
+ * Local typedefs so jsdoc/no-undefined-types doesn't complain in projects
+ * that don't load DOM lib types.
+ * @typedef {unknown} CanvasRenderingContext2D
+ * @typedef {unknown} KeyboardEvent
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (already DPR-scaled).
+ * @property {number} w - Canvas width in device pixels.
+ * @property {number} h - Canvas height in device pixels.
+ * @property {number} dpr - Device pixel ratio used for transforms.
+ * @property {number} [elapsed] - Time since last frame (ms).
+ * @property {boolean} [paused] - Whether animation is paused.
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6).
+ */
+
+/**
  * Program: DigitalRain
  * Genre: Rain
  * Style: Katakana streams with soft trail
@@ -14,9 +29,7 @@ import { emit } from '../state.js';
  *   → / ←  -> respawn probability (staged via index)
  */
 export const digitalrain = (() => {
-  const GLYPHS = Array.from({ length: 96 }, (_, i) =>
-    String.fromCharCode(0x30a0 + (i % 96))
-  );
+  const GLYPHS = Array.from({ length: 96 }, (_, i) => String.fromCharCode(0x30a0 + (i % 96)));
 
   // ----- utils -----
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -25,12 +38,12 @@ export const digitalrain = (() => {
 
   // ----- intensity STAGES (1..10; index 0 unused) -----
   // Tail multiplier stages (bigger = longer trail; fade less)
-  const TAIL_STAGES = [0, 0.01, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25];
+  const TAIL_STAGES = [0, 0.01, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25];
   let tailIndex = 5; // default 1.00×
   let TAIL_MULT = TAIL_STAGES[tailIndex];
 
   // Spawn probability stages (probabilities 0..1)
-  const SPAWN_STAGES = [0, 0.005, 0.010, 0.020, 0.030, 0.050, 0.075, 0.100, 0.150, 0.200, 0.225];
+  const SPAWN_STAGES = [0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.225];
   let spawnIndex = 5; // default ≈5%
   let RESPAWN_P = SPAWN_STAGES[spawnIndex];
 
@@ -39,28 +52,40 @@ export const digitalrain = (() => {
   // Snap any numeric multiplier to nearest tail stage
   const snapToTailIndex = (mult) => {
     if (!Number.isFinite(mult)) return tailIndex;
-    let bestIdx = 1, best = Infinity;
+    let bestIdx = 1,
+      best = Infinity;
     for (let i = 1; i <= 10; i++) {
       const d = Math.abs(TAIL_STAGES[i] - mult);
-      if (d < best) { best = d; bestIdx = i; }
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+      }
     }
     return bestIdx;
   };
 
   // HUD step toasts
-  const emitTailStep  = () => emit('rain.tail.step',  { index: tailIndex,  total: 10 });
+  const emitTailStep = () => emit('rain.tail.step', { index: tailIndex, total: 10 });
   const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
 
   // ----- state -----
-  let cols = 0, fontSize = 16;
+  let cols = 0,
+    fontSize = 16;
   /** @type {number[]} */ let drops = [];
-  let running = false, tickAcc = 0, tickMs = 75;
+  let running = false,
+    tickAcc = 0,
+    tickMs = 75;
 
   // one-time guards
   let wiredBus = false;
   let keysBound = false;
 
   // ----- layout / seed -----
+  /**
+   * Compute font size, column count, and seed starting rows for each drop.
+   * @param {RenderCtx} ctx - Render context with canvas size/DPR.
+   * @returns {void}
+   */
   function calc(ctx) {
     fontSize = Math.max(12, Math.floor(0.02 * Math.min(ctx.w, ctx.h)));
     cols = Math.floor(ctx.w / ctx.dpr / fontSize);
@@ -68,6 +93,12 @@ export const digitalrain = (() => {
   }
 
   // ----- lifecycle -----
+  /**
+   * Initialize DPR transform, reset canvas defaults, compute layout,
+   * and wire the event bus (once).
+   * @param {RenderCtx} ctx - Render context with canvas and current size.
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -100,7 +131,7 @@ export const digitalrain = (() => {
 
           // Drive HUD toasts ourselves
           emit('rain.spawn', Math.round(RESPAWN_P * 100)); // numeric % toast
-          emitSpawnStep();                                 // X/N toast
+          emitSpawnStep(); // X/N toast
         });
       }
       wiredBus = true;
@@ -113,8 +144,19 @@ export const digitalrain = (() => {
     emitSpawnStep();
   }
 
-  function resize(ctx) { init(ctx); }
+  /**
+   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
+   * @param {RenderCtx} ctx - Updated render context (new size/DPR).
+   * @returns {void}
+   */
+  function resize(ctx) {
+    init(ctx);
+  }
 
+  /**
+   * Begin animation and bind hotkeys (once).
+   * @returns {void}
+   */
   function start() {
     running = true;
     if (!keysBound) {
@@ -123,6 +165,10 @@ export const digitalrain = (() => {
     }
   }
 
+  /**
+   * Stop animation and unbind hotkeys.
+   * @returns {void}
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -131,18 +177,33 @@ export const digitalrain = (() => {
     }
   }
 
+  /**
+   * Clear internal drop state and the entire canvas.
+   * @param {RenderCtx} ctx - Render context for size and 2D context access.
+   * @returns {void}
+   */
   function clear(ctx) {
     drops = [];
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
   // ----- speed mapping -----
+  /**
+   * Apply global speed multiplier to tick interval (lower tickMs = faster).
+   * @param {number} mult - Global speed multiplier (~0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = clamp(Number(mult) || 1, 0.4, 1.6);
     tickMs = Math.max(16, Math.round(75 / m));
   }
 
   // ----- hotkeys: Shift+Arrows -----
+  /**
+   * Handle Shift+Arrow hotkeys to change tail (↑/↓) and spawn (→/←) stages.
+   * @param {KeyboardEvent} e - Keyboard event from window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     let handled = false;
@@ -152,7 +213,7 @@ export const digitalrain = (() => {
           tailIndex += 1;
           TAIL_MULT = TAIL_STAGES[tailIndex];
           emit('rain.tail', Number(TAIL_MULT)); // numeric HUD toast
-          emitTailStep();                       // X/N HUD toast
+          emitTailStep(); // X/N HUD toast
         }
         handled = true;
         break;
@@ -194,6 +255,11 @@ export const digitalrain = (() => {
   }
 
   // ----- frame -----
+  /**
+   * Render one frame and advance drops on fixed ticks.
+   * @param {RenderCtx} ctx - Render context (elapsed, speed, paused).
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     tickAcc += ctx.elapsed;
@@ -205,7 +271,8 @@ export const digitalrain = (() => {
 
     // Trail fade: divide base alpha by TAIL_MULT (bigger tail => weaker fade)
     const BASE_FADE = 0.08;
-    const MIN_FADE = 0.02, MAX_FADE = 0.20;
+    const MIN_FADE = 0.02,
+      MAX_FADE = 0.2;
     const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
     g.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
     g.fillRect(0, 0, W, H);

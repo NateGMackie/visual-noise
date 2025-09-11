@@ -3,6 +3,20 @@
 
 import { emit } from '../state.js';
 
+/** @typedef {unknown} CanvasRenderingContext2D */
+/** @typedef {unknown} KeyboardEvent */
+/**
+ * Render context passed by the host engine.
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (already DPR-scaled)
+ * @property {number} w - Canvas width in device pixels
+ * @property {number} h - Canvas height in device pixels
+ * @property {number} dpr - Device pixel ratio
+ * @property {number} [elapsed] - Time since last frame (ms)
+ * @property {boolean} [paused] - Whether animation is paused
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6)
+ */
+
 /**
  * Program: Drizzle
  * Genre: Rain
@@ -23,12 +37,12 @@ export const drizzle = (() => {
 
   // ---------- intensity STAGES (1..10; index 0 unused) ----------
   // Tail multiplier stages (bigger = longer trail; we fade less)
-  const TAIL_STAGES = [0, 0.01, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 2.00, 2.25];
+  const TAIL_STAGES = [0, 0.01, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25];
   let tailIndex = 5;
   let TAIL_MULT = TAIL_STAGES[tailIndex];
 
   // Spawn probability stages (probabilities 0..1)
-  const SPAWN_STAGES = [0, 0.005, 0.010, 0.020, 0.030, 0.050, 0.075, 0.100, 0.150, 0.200, 0.225];
+  const SPAWN_STAGES = [0, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.225];
   let spawnIndex = 5;
   let RESPAWN_P = SPAWN_STAGES[spawnIndex];
 
@@ -37,22 +51,30 @@ export const drizzle = (() => {
   // Snap any numeric multiplier to nearest tail stage
   const snapToTailIndex = (mult) => {
     if (!Number.isFinite(mult)) return tailIndex;
-    let bestIdx = 1, best = Infinity;
+    let bestIdx = 1,
+      best = Infinity;
     for (let i = 1; i <= 10; i++) {
       const d = Math.abs(TAIL_STAGES[i] - mult);
-      if (d < best) { best = d; bestIdx = i; }
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+      }
     }
     return bestIdx;
   };
 
   // HUD step toasts
-  const emitTailStep  = () => emit('rain.tail.step',  { index: tailIndex,  total: 10 });
+  const emitTailStep = () => emit('rain.tail.step', { index: tailIndex, total: 10 });
   const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
 
   // ---------- state ----------
-  let cols = 0, rows = 0, fontSize = 16, lineH = 18;
+  let cols = 0,
+    rows = 0,
+    fontSize = 16,
+    lineH = 18;
   /** @type {number[]} */ let drops = [];
-  let tickAcc = 0, tickMs = 80;
+  let tickAcc = 0,
+    tickMs = 80;
   let running = false;
 
   // one-time guards
@@ -60,6 +82,11 @@ export const drizzle = (() => {
   let keysBound = false;
 
   // ---------- layout / seeding ----------
+  /**
+   * Compute font metrics, grid dimensions, and seed initial drop positions.
+   * @param {RenderCtx} ctx - Render context with canvas size and DPR.
+   * @returns {void}
+   */
   function compute(ctx) {
     fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
     lineH = Math.round(fontSize * 1.2);
@@ -68,6 +95,11 @@ export const drizzle = (() => {
     drops = new Array(cols).fill(0).map(() => Math.floor(-rows * Math.random()));
   }
 
+  /**
+   * Initialize DPR transforms, reset canvas defaults, compute layout, and wire bus.
+   * @param {RenderCtx} ctx - Render context with canvas, dpr, and dimensions.
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
@@ -102,7 +134,7 @@ export const drizzle = (() => {
 
           // HUD (notify.js shows numeric when the payload is a number; X/N via .step)
           emit('rain.spawn', Math.round(RESPAWN_P * 100)); // "Spawn: N%"
-          emitSpawnStep();                                 // "Spawn: X/10"
+          emitSpawnStep(); // "Spawn: X/10"
         });
       }
 
@@ -116,8 +148,19 @@ export const drizzle = (() => {
     emitSpawnStep();
   }
 
-  function resize(ctx) { init(ctx); }
+  /**
+   * Handle resize/DPR changes by re-running init (rebuild layout/state).
+   * @param {RenderCtx} ctx - Render context with updated canvas sizing.
+   * @returns {void}
+   */
+  function resize(ctx) {
+    init(ctx);
+  }
 
+  /**
+   * Begin animation and bind hotkeys.
+   * @returns {void}
+   */
   function start() {
     running = true;
     if (!keysBound) {
@@ -126,6 +169,10 @@ export const drizzle = (() => {
     }
   }
 
+  /**
+   * Stop animation and unbind hotkeys.
+   * @returns {void}
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -134,22 +181,38 @@ export const drizzle = (() => {
     }
   }
 
+  /**
+   * Clear internal drop state and the canvas.
+   * @param {RenderCtx} ctx - Render context with 2D canvas.
+   * @returns {void}
+   */
   function clear(ctx) {
     drops = [];
     ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
   // ---------- speed mapping (per global speed) ----------
+  /**
+   * Map the global speed multiplier to tick interval (ms). Higher speed → faster ticks.
+   * @param {number} mult - Global speed multiplier (~0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
     tickMs = Math.max(16, Math.round(80 / m));
   }
 
   // ---------- hotkeys: Shift+Arrows ----------
+  /**
+   * Handle Shift+Arrow hotkeys to adjust tail and spawn stages.
+   * @param {KeyboardEvent} e - Keyboard event from window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     switch (e.key) {
-      case 'ArrowUp': {        // longer tails (next stage)
+      case 'ArrowUp': {
+        // longer tails (next stage)
         if (tailIndex < 10) {
           tailIndex += 1;
           TAIL_MULT = TAIL_STAGES[tailIndex];
@@ -158,7 +221,8 @@ export const drizzle = (() => {
         }
         break;
       }
-      case 'ArrowDown': {      // shorter tails (prev stage)
+      case 'ArrowDown': {
+        // shorter tails (prev stage)
         if (tailIndex > 1) {
           tailIndex -= 1;
           TAIL_MULT = TAIL_STAGES[tailIndex];
@@ -167,7 +231,8 @@ export const drizzle = (() => {
         }
         break;
       }
-      case 'ArrowRight': {     // more spawns (next stage)
+      case 'ArrowRight': {
+        // more spawns (next stage)
         if (spawnIndex < 10) {
           spawnIndex += 1;
           RESPAWN_P = SPAWN_STAGES[spawnIndex];
@@ -177,7 +242,8 @@ export const drizzle = (() => {
         }
         break;
       }
-      case 'ArrowLeft': {      // fewer spawns (prev stage)
+      case 'ArrowLeft': {
+        // fewer spawns (prev stage)
         if (spawnIndex > 1) {
           spawnIndex -= 1;
           RESPAWN_P = SPAWN_STAGES[spawnIndex];
@@ -189,6 +255,11 @@ export const drizzle = (() => {
   }
 
   // ---------- frame ----------
+  /**
+   * Render one frame and optionally advance column positions on tick.
+   * @param {RenderCtx} ctx - Render context including elapsed/speed/paused flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     tickAcc += ctx.elapsed;
@@ -199,8 +270,9 @@ export const drizzle = (() => {
     applySpeed(ctx.speed);
 
     // Trail fade: bigger tailIndex => bigger TAIL_MULT => weaker fade (longer trail)
-    const BASE_FADE = 0.10;
-    const MIN_FADE = 0.02, MAX_FADE = 0.25;
+    const BASE_FADE = 0.1;
+    const MIN_FADE = 0.02,
+      MAX_FADE = 0.25;
     const fadeAlpha = Math.max(MIN_FADE, Math.min(MAX_FADE, BASE_FADE / TAIL_MULT));
     g.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
     g.fillRect(0, 0, W, H);

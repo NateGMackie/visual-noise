@@ -35,7 +35,6 @@ const NOTIFY = Object.freeze({
   program: 'notify.style',
 });
 
-
 // -------------------------
 // Configuration
 // -------------------------
@@ -82,10 +81,8 @@ const CHANNEL_OPTIONS = {
   // State changes
   [NOTIFY.state]: { coalesce: true, durationMs: 1200, coalesceWindowMs: 1200 },
 
-  [NOTIFY.rainTail]:  { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
-[NOTIFY.rainSpawn]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
-
-
+  [NOTIFY.rainTail]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
+  [NOTIFY.rainSpawn]: { coalesce: true, durationMs: 900, coalesceWindowMs: 500 },
 };
 
 // -------------------------
@@ -317,7 +314,6 @@ function titleForChannel(channel) {
   }
 }
 
-
 // -------------------------
 // Public API
 // -------------------------
@@ -435,6 +431,33 @@ function initNotify(options = {}) {
 }
 
 /**
+ * Parse a `{index,total}` step payload that may arrive as an object or a JSON string.
+ * Returns `null` if it can't be parsed or is missing finite numbers.
+ * @param {unknown} payload - Step payload, either an object like `{ index, total }`
+ *   or a JSON string with those properties.
+ * @returns {{index: number, total: number} | null} Parsed step info, or `null` on failure.
+ */
+function parseStepPayload(payload) {
+  if (payload && typeof payload === 'object') {
+    // @ts-ignore - runtime shape check follows
+    const { index, total } = /** @type {any} */ (payload);
+    if (Number.isFinite(index) && Number.isFinite(total)) return { index, total };
+  }
+  if (typeof payload === 'string') {
+    try {
+      const obj = JSON.parse(payload);
+      if (obj && Number.isFinite(obj.index) && Number.isFinite(obj.total)) {
+        return { index: obj.index, total: obj.total };
+      }
+    } catch {
+      // Non-JSON or malformed — treat as no step payload
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Subscribe to app events and map them to toasts.
  * @param {(event:string, fn:Function)=>void} on - Event subscription function (bus.on).
  * @returns {void} No return value.
@@ -482,14 +505,10 @@ function wireBus(on) {
   });
 
   on('speed.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try { ({ index, total } = JSON.parse(payload)); } catch {}
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
+    const step = parseStepPayload(payload);
+    if (step) {
       _lastSpeedStepAt = now();
-      notify(NOTIFY.speed, `Speed ${index}/${total}`, { coalesce: true });
+      notify(NOTIFY.speed, `Speed ${step.index}/${step.total}`, { coalesce: true });
     }
   });
   // --- /SPEED ---
@@ -506,13 +525,9 @@ function wireBus(on) {
     notify(NOTIFY.fireHeight, `Height: ${val}×`, { coalesce: true });
   });
   on('fire.height.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try { ({ index, total } = JSON.parse(payload)); } catch {}
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
-      notify(NOTIFY.fireHeight, `Height: ${index}/${total}`, { coalesce: true });
+    const step = parseStepPayload(payload);
+    if (step) {
+      notify(NOTIFY.fireHeight, `Height: ${step.index}/${step.total}`, { coalesce: true });
     }
   });
 
@@ -521,13 +536,9 @@ function wireBus(on) {
     notify(NOTIFY.fireFuel, `Fuel: ${val}%`, { coalesce: true });
   });
   on('fire.fuel.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try { ({ index, total } = JSON.parse(payload)); } catch {}
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
-      notify(NOTIFY.fireFuel, `Fuel: ${index}/${total}`, { coalesce: true });
+    const step = parseStepPayload(payload);
+    if (step) {
+      notify(NOTIFY.fireFuel, `Fuel: ${step.index}/${step.total}`, { coalesce: true });
     }
   });
 
@@ -538,13 +549,9 @@ function wireBus(on) {
     notify(NOTIFY.rainTail, `Tail: ${val}×`, { coalesce: true });
   });
   on('rain.tail.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try { ({ index, total } = JSON.parse(payload)); } catch {}
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
-      notify(NOTIFY.rainTail, `Tail: ${index}/${total}`, { coalesce: true });
+    const step = parseStepPayload(payload);
+    if (step) {
+      notify(NOTIFY.rainTail, `Tail: ${step.index}/${step.total}`, { coalesce: true });
     }
   });
 
@@ -553,17 +560,12 @@ function wireBus(on) {
     notify(NOTIFY.rainSpawn, `Spawn: ${val}%`, { coalesce: true });
   });
   on('rain.spawn.step', (payload) => {
-    let index, total;
-    if (payload && typeof payload === 'object') ({ index, total } = payload);
-    else {
-      try { ({ index, total } = JSON.parse(payload)); } catch {}
-    }
-    if (Number.isFinite(index) && Number.isFinite(total)) {
-      notify(NOTIFY.rainSpawn, `Spawn: ${index}/${total}`, { coalesce: true });
+    const step = parseStepPayload(payload);
+    if (step) {
+      notify(NOTIFY.rainSpawn, `Spawn: ${step.index}/${step.total}`, { coalesce: true });
     }
   });
 }
-
 
 /**
  * Dev helper to expose API to window (optional).
