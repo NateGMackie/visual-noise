@@ -7,7 +7,7 @@ import { DEFAULT_SPEED_MODEL } from './lib/speed.js';
 // Legacy-compatible config
 // -------------------------
 export const cfg = {
-  persona: 'crypto', // legacy "current mode" name (still honored)
+  persona: 'liveOutput', // legacy "current mode" name (still honored)
   theme: 'classic',
   dock: 'bottom',
   speed: 0.7, // legacy multiplier; we will keep this coherent with active.speed index
@@ -56,9 +56,17 @@ export const registry = {
   order: ['system', 'developer', 'rain', 'fire'],
   families: {
     system: {
-      name: 'system monitor',
-      modesOrder: ['crypto', 'sysadmin'],
+      name: 'system',
+      modesOrder: ['liveOutput', 'crypto', 'sysadmin'],
       modes: {
+        liveOutput: {
+          name: 'liveOutput',
+          flavorsOrder: ['classic'],
+          flavors: {
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
+          },
+          impl: 'liveOutput',
+        },
         crypto: {
           name: 'crypto',
           flavorsOrder: ['classic'],
@@ -80,9 +88,17 @@ export const registry = {
 
     developer: {
       name: 'developer',
-      modesOrder: ['mining'],
+      modesOrder: ['coding', 'mining'],
       modes: {
-        mining: {
+        coding: {
+          name: 'coding',
+          flavorsOrder: ['classic'],
+          flavors: {
+            classic: { name: 'classic', defaultSpeed: 5, minSpeed: 1, maxSpeed: 10, step: 1 },
+          },
+          impl: 'coding',
+        },
+         mining: {
           name: 'mining',
           flavorsOrder: ['classic'],
           flavors: {
@@ -160,7 +176,7 @@ export const registry = {
 // Active selection in the taxonomy
 export const active = {
   familyId: 'system',
-  modeId: 'crypto',
+  modeId: 'liveOutput',
   flavorId: 'classic',
   themeId: cfg.theme,
   // IMPORTANT: we keep this as an INDEX on a 1..steps scale (human-friendly).
@@ -474,9 +490,11 @@ export function setTheme(theme) {
 // --- taxonomy: map mode keys -> { family, typeLabel } ---
 export const taxonomy = {
   // system
+  liveOutput: { family: 'system', typeLabel: 'liveOutput' },
   crypto: { family: 'system', typeLabel: 'crypto' },
   sysadmin: { family: 'system', typeLabel: 'sysadmin' },
   // developer
+  coding: { family: 'developer', typeLabel: 'coding' },
   mining: { family: 'developer', typeLabel: 'mining' },
   // rain
   matrix: { family: 'rain', typeLabel: 'matrix' },
