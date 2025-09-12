@@ -98,7 +98,7 @@ export const registry = {
           },
           impl: 'coding',
         },
-         mining: {
+        mining: {
           name: 'mining',
           flavorsOrder: ['classic'],
           flavors: {
