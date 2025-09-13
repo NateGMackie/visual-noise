@@ -322,16 +322,24 @@ export const coding = (() => {
    * @param {{w:number,h:number}} ctx - Render context.
    * @returns {void} Recomputes layout metrics.
    */
-  function resize(ctx) {
-    // pick up vibe changes on resize/theme swap
-    PALETTE = readPalette();
-    const w = ctx.w,
-      h = ctx.h;
-    codeWidthPx = Math.floor(w * 0.7) | 0;
-    lineH = Math.round(fontPx * 1.25) || 18;
-    codeLinesVisible = Math.max(4, Math.floor(h / lineH));
-    outLinesVisible = codeLinesVisible;
-  }
+  // Replace your current resize() with this:
+function resize(ctx) {
+  // pick up vibe changes on resize/theme swap
+  PALETTE = readPalette();
+
+  // Use logical (CSS px) size, not device px.
+  const dpr = ctx.dpr || 1;
+  const W = Math.max(1, Math.round(ctx.w / dpr));
+  const H = Math.max(1, Math.round(ctx.h / dpr));
+
+  codeWidthPx = Math.floor(W * 0.70) | 0;
+  lineH = Math.round(fontPx * 1.25) || 18;
+
+  // Lines visible should also be based on CSS px height.
+  codeLinesVisible = Math.max(4, Math.floor(H / lineH));
+  outLinesVisible = codeLinesVisible;
+}
+
 
   /**
    * Clear canvas and internal buffers.
