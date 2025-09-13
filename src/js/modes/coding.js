@@ -10,6 +10,8 @@
  * @typedef {any} CanvasRenderingContext2D
  */
 
+import { modular } from '../lib/typography.js';
+
 // --- vibe/theme event hooks (cleanly attached/detached) ---
 let __onTheme = null;
 let __onVibe = null;
@@ -18,17 +20,14 @@ export const coding = (() => {
   /** @type {string[]} */ let codeLines = [];
   /** @type {string[]} */ let outLines = [];
 
-  // Layout
+  // Layout / typography
   let codeWidthPx = 0;
   let codeLinesVisible = 0;
   let outLinesVisible = 0;
   let lineH = 18;
+  let fontPx = 14;
 
-  // Typography
-  const fontPx = 14;
-  const font = `${fontPx}px monospace`;
-
-  // ---- cadence baselines (ms) ----
+  // Cadence baselines (ms)
   let codeIntervalMsBase = 450; // delay before starting a new code line (mid speed)
   let outIntervalMsBase = 1050; // right-pane cadence (mid speed)
   let typeSpeedMsBase = 70; // per-character typing (mid speed)
@@ -151,7 +150,7 @@ export const coding = (() => {
    * @param {string} line - Line to render.
    * @param {number} x - Left position in px.
    * @param {number} y - Top position in px.
-   * @returns {void} Draws text into the 2D context.
+   * @returns {void}
    */
   function drawHighlightedLine(g, line, x, y) {
     let dx = x;
@@ -229,7 +228,7 @@ export const coding = (() => {
    * @param {string[]} buf - Target buffer.
    * @param {string} line - Line to append.
    * @param {number} cap - Max size; trims from head when exceeded.
-   * @returns {void} Updates the buffer in-place.
+   * @returns {void}
    */
   function pushCapped(buf, line, cap) {
     buf.push(line);
@@ -240,13 +239,12 @@ export const coding = (() => {
    * Pick a random element from an array.
    * @template T
    * @param {T[]} arr - Source array.
-   * @returns {T} A randomly selected element.
+   * @returns {T} A randomly selected element from the array.
    */
   function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  // Right pane: vibe-colored mono
   /**
    * Draw right-pane log output using the vibe’s mono color.
    * @param {CanvasRenderingContext2D} g - 2D context.
@@ -254,7 +252,7 @@ export const coding = (() => {
    * @param {number} x - Left position in px.
    * @param {number} y - Top position in px.
    * @param {number} maxVisible - Max lines to render.
-   * @returns {void} Draws text into the 2D context.
+   * @returns {void}
    */
   function drawRightMono(g, lines, x, y, maxVisible) {
     g.fillStyle = PALETTE.output;
@@ -265,7 +263,7 @@ export const coding = (() => {
   /**
    * Map the global speed multiplier into per-loop intervals.
    * @param {number} mult - Global speed multiplier (≈0.4–1.6).
-   * @returns {void} Updates internal cadence variables.
+   * @returns {void}
    */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
@@ -274,19 +272,38 @@ export const coding = (() => {
     typeSpeedMs = Math.max(12, Math.round(typeSpeedMsBase / m));
   }
 
+  // ---------- sizing/typography (match mining.js behavior) ----------
+  /**
+   * Sync canvas transform and typography to CSS pixels & modular scale.
+   * (Matches mining.js approach so fonts look uniform and stable on resize/rotate.)
+   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dpr?:number}} ctx - Render context providing the 2D canvas, size, and device-pixel ratio used to compute the DPR transform and font metrics.
+   * @returns {void} Updates the canvas transform, font size, and line height so drawing occurs in CSS pixels.
+   */
+  function syncTypography(ctx) {
+    const g = ctx.ctx2d;
+    const dpr = ctx.dpr || window.devicePixelRatio || 1;
+
+    // Draw in CSS pixels: scale device pixels down by DPR.
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Use modular(0) like mining; keep a sane floor for tiny screens.
+    fontPx = Math.max(12, Math.round(modular(0)));
+    g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    g.textBaseline = 'top';
+
+    // Slightly tighter than 1.25 for coding; mining uses ~1.15
+    lineH = Math.max(12, Math.round(fontPx * 1.15));
+  }
+
   // ---------- lifecycle ----------
   /**
    * Initialize mode (fonts, palette, buffers, listeners).
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number}} ctx - Render context.
-   * @returns {void} Prepares internal state for rendering.
+   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dpr?:number}} ctx - Render context used to configure drawing and metrics.
+   * @returns {void} Prepares internal state, seeds the right pane, and attaches theme/vibe listeners.
    */
   function init(ctx) {
-    const g = ctx.ctx2d;
     PALETTE = readPalette();
-
-    g.font = font;
-    g.textBaseline = 'top';
-    lineH = Math.round(fontPx * 1.25) || 18;
+    syncTypography(ctx);
 
     codeLines = [];
     outLines = [];
@@ -298,7 +315,7 @@ export const coding = (() => {
     accCaretS = 0;
     caretOn = true;
 
-    // seed right pane a bit so it isn’t blank
+    // seed right pane so it isn’t blank
     for (let i = 0; i < 3; i++) pushCapped(outLines, pick(OUTPUT_SNIPPETS), MAX_OUT_LINES);
 
     // listen for vibe/theme changes and refresh palette live
@@ -310,32 +327,27 @@ export const coding = (() => {
       __onVibe = () => {
         PALETTE = readPalette();
       };
-      bus.on('theme', __onTheme); // themes applied via main.js handler
-      bus.on('vibe', __onVibe); // alias for style systems
+      bus.on('theme', __onTheme);
+      bus.on('vibe', __onVibe);
     }
 
     resize(ctx);
   }
 
   /**
-   * Handle canvas resizes.
-   * @param {{w:number,h:number}} ctx - Render context.
-   * @returns {void} Recomputes layout metrics.
+   * Handle canvas resizes (mirror mining.js: recompute metrics in CSS px).
+   * @param {{w:number,h:number,dpr?:number,ctx2d:CanvasRenderingContext2D}} ctx - Render context.
+   * @returns {void}
    */
-  // Replace your current resize() with this:
   function resize(ctx) {
-    // pick up vibe changes on resize/theme swap
     PALETTE = readPalette();
+    syncTypography(ctx);
 
-    // Use logical (CSS px) size, not device px.
-    const dpr = ctx.dpr || 1;
+    const dpr = ctx.dpr || window.devicePixelRatio || 1;
     const W = Math.max(1, Math.round(ctx.w / dpr));
     const H = Math.max(1, Math.round(ctx.h / dpr));
 
     codeWidthPx = Math.floor(W * 0.7) | 0;
-    lineH = Math.round(fontPx * 1.25) || 18;
-
-    // Lines visible should also be based on CSS px height.
     codeLinesVisible = Math.max(4, Math.floor(H / lineH));
     outLinesVisible = codeLinesVisible;
   }
@@ -343,7 +355,7 @@ export const coding = (() => {
   /**
    * Clear canvas and internal buffers.
    * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number}} ctx - Render context.
-   * @returns {void} Resets internal buffers and clears the surface.
+   * @returns {void}
    */
   function clear(ctx) {
     const g = ctx.ctx2d;
@@ -357,10 +369,13 @@ export const coding = (() => {
     caretOn = true;
   }
 
-  /** @returns {void} No-op lifecycle hook. */
+  /**
+   * Start hook (no-op to mirror other modes).
+   * @returns {void} No value; lifecycle stub for parity with other modes.
+   */
   function start() {}
 
-  /** @returns {void} Detaches vibe/theme listeners. */
+  /** @returns {void} */
   function stop() {
     // detach vibe/theme listeners we added in init()
     const bus = window.app && window.app.events;
@@ -375,16 +390,18 @@ export const coding = (() => {
   /**
    * Per-frame update & draw.
    * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,elapsed:number,dt:number,speed:number}} ctx - Render context.
-   * @returns {void} Advances timers and renders both panes.
+   * @returns {void}
    */
   function frame(ctx) {
     const g = ctx.ctx2d;
 
-    // Mining-style: map speed each frame; driven from shared render loop.
+    // Keep timing in sync with the global speed model
     applySpeed(ctx.speed);
 
-    const dtMs = ctx.elapsed || 16;
-    const dtS = ctx.dt || dtMs / 1000;
+    // IMPORTANT: do not fall back to non-zero when paused.
+    // main.js sets these to 0 when ctx.paused === true.
+    const dtMs = ctx.elapsed; // 0 while paused
+    const dtS = ctx.dt; // 0 while paused
 
     // --- RIGHT PANE cadence ---
     accOutMs += dtMs;
@@ -417,17 +434,17 @@ export const coding = (() => {
       }
     }
 
-    // Caret blink
+    // Caret blink (also halted while paused since dtS === 0)
     accCaretS += dtS;
     if (accCaretS >= CARET_PERIOD_S) {
       accCaretS -= CARET_PERIOD_S;
       caretOn = !caretOn;
     }
 
-    // ---- DRAW ----
+    // ---- DRAW (CSS pixels thanks to setTransform) ----
     g.clearRect(0, 0, ctx.w, ctx.h);
 
-    // ----- LEFT PANE: keep the last row free for the active typed line -----
+    // LEFT PANE: keep the last row free for the active typed line
     const fullTailAll = codeLines.slice(-codeLinesVisible);
     const mustReserveRowForPartial = !!partialLine && fullTailAll.length >= codeLinesVisible;
     const fullTail = mustReserveRowForPartial ? fullTailAll.slice(1) : fullTailAll;
