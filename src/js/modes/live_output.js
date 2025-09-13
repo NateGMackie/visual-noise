@@ -10,12 +10,16 @@
  */
 
 export const liveOutput = (() => {
-  /** @type {string[]} */
-  let lines = [];
+  // ——— Internal state ———
+  /** @type {string[]} */ let lines = [];
   let lineH = 18;
   const fontPx = 14;
   const font = `${fontPx}px monospace`;
-  let visible = 0;
+
+  // Logical (CSS px) geometry, derived from ctx.w/ctx.h & DPR
+  let rows = 0;
+  let cols = 0;
+  const xPad = 8;
 
   // cadence (seconds) — dt already includes speed & pause from main loop
   const BASE_INTERVAL = 0.16;
@@ -51,7 +55,8 @@ export const liveOutput = (() => {
     };
   }
 
-  const MAX_LINES = 900;
+  // Cap scales with rows so the scrollback feels similar across sizes
+  let MAX_LINES = 900;
 
   /** @type {{s:'INFO'|'DEBUG'|'WARN'|'ERROR'|'PASS'|'FAIL', t:string}[]} */
   const POOL = [
@@ -92,7 +97,7 @@ export const liveOutput = (() => {
   }
 
   /**
-   * Draw a single log line with severity coloring.
+   * Draw a single log line with severity coloring, truncated to column width.
    * @param {CanvasRenderingContext2D} g - 2D drawing context.
    * @param {number} y - Y coordinate (top baseline).
    * @param {'INFO'|'DEBUG'|'WARN'|'ERROR'|'PASS'|'FAIL'|string} sevRaw - Severity tag.
@@ -104,40 +109,60 @@ export const liveOutput = (() => {
     const key = String(sevRaw || 'INFO')
       .toUpperCase()
       .trim();
+    const payload = `[${key}] ${txt}`;
+    const clipped = payload.length > cols ? payload.slice(0, Math.max(0, cols - 1)) + '…' : payload;
     g.fillStyle = (SEV && SEV[key]) || (SEV && SEV.INFO) || '#ffffff';
-    g.fillText(`[${key}] ${txt}`, 8, y);
+    g.fillText(clipped, xPad, y);
   }
 
   /**
-   * Initialize mode state and seed a few lines.
-   * @param {{ctx2d:CanvasRenderingContext2D,h:number}} ctx - Shared render context.
-   * @returns {void} Prepares fonts, line height, buffers, and visible count.
+   * Initialize / recompute all metrics from geometry & DPR.
+   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dpr?:number}} ctx - Shared render context.
+   * @returns {void}
    */
   function init(ctx) {
     readPalette();
+
     const g = ctx.ctx2d;
     g.font = font;
     g.textBaseline = 'top';
-    lineH = Math.round(fontPx * 1.25) || 18;
-    lines = [];
-    accum = 0;
 
-    // seed a few
-    for (let i = 0; i < 8; i++) {
-      const { s, t } = pick(POOL);
-      push(lines, `[${s}] ${t}`);
+    // Logical (CSS px) width/height
+    const dpr = ctx.dpr || 1;
+    const W = Math.max(1, Math.round(ctx.w / dpr));
+    const H = Math.max(1, Math.round(ctx.h / dpr));
+
+    lineH = Math.round(fontPx * 1.25) || 18;
+
+    // Rows & columns from CSS px for consistent feel across DPRs
+    rows = Math.max(5, Math.floor(H / lineH));
+    // Rough monospace width: measure 'M' once in CSS px
+    const monoW = Math.max(5, g.measureText('M').width || fontPx * 0.6);
+    cols = Math.max(20, Math.floor((W - xPad * 2) / monoW));
+
+    // Scrollback size scales with visible rows (≈ 4–6 screens)
+    MAX_LINES = Math.max(200, rows * 5);
+
+    // first-time init seeds
+    if (!lines.length) {
+      lines = [];
+      accum = 0;
+      for (let i = 0; i < Math.min(8, rows); i++) {
+        const { s, t } = pick(POOL);
+        push(lines, `[${s}] ${t}`);
+      }
     }
-    resize(ctx);
   }
 
   /**
-   * Handle canvas size changes.
-   * @param {{h:number}} ctx - Shared render context (height used to compute rows).
-   * @returns {void} Updates visible row count from height and line height.
+   * Handle canvas resizes (mirror mining/crypto: recompute metrics in CSS px).
+   * @param {{w:number,h:number,dpr?:number,ctx2d:CanvasRenderingContext2D}} ctx - Shared render
+   * context; `w`/`h` are the current canvas dimensions in device pixels, `dpr` is the device
+   * pixel ratio being applied, and `ctx2d` is the 2D drawing context.
+   * @returns {void} Recomputes pane widths and the visible row count.
    */
   function resize(ctx) {
-    readPalette();
-    visible = Math.max(5, Math.floor(ctx.h / lineH));
+    init(ctx);
   }
 
   /**
@@ -159,8 +184,10 @@ export const liveOutput = (() => {
 
   /**
    * Per-frame update & draw.
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dt:number}} ctx - Shared render context.
-   * @returns {void} Advances the log cadence and draws the latest lines.
+   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,elapsed:number,dt:number,speed:number}} ctx - Shared
+   * render context providing timing deltas (`elapsed`/`dt`), the current speed multiplier (`speed`),
+   * the canvas size (`w`/`h`), and the 2D drawing context (`ctx2d`).
+   * @returns {void} Advances cadence and renders the latest lines.
    */
   function frame(ctx) {
     const g = ctx.ctx2d;
@@ -170,7 +197,7 @@ export const liveOutput = (() => {
     while (accum >= BASE_INTERVAL) {
       accum -= BASE_INTERVAL;
 
-      // One RNG sample keeps predictable proportions and avoids dupe-else-if lint
+      // One RNG sample keeps predictable proportions
       const r = Math.random();
       if (r < 0.1) {
         const passed = 10 + Math.floor(Math.random() * 20);
@@ -185,13 +212,16 @@ export const liveOutput = (() => {
       }
     }
 
-    // DRAW
+    // DRAW (coords are in CSS px because main loop applies DPR transform)
     g.clearRect(0, 0, ctx.w, ctx.h);
-    const tail = lines.slice(-visible);
+    const tail = lines.slice(-rows);
+    let y = 8;
     for (let i = 0; i < tail.length; i++) {
       const line = tail[i];
       const sev = (/\[(INFO|DEBUG|WARN|ERROR|PASS|FAIL)\]/.exec(line) || [])[1] || 'INFO';
-      drawLine(g, 8 + i * lineH, sev, line.replace(/^\[[^\]]+\]\s*/, ''));
+      drawLine(g, y, sev, line.replace(/^\[[^\]]+\]\s*/, ''));
+      y += lineH;
+      if (y > ctx.h) break; // guard if something got out of sync
     }
   }
 

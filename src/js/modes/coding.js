@@ -323,23 +323,22 @@ export const coding = (() => {
    * @returns {void} Recomputes layout metrics.
    */
   // Replace your current resize() with this:
-function resize(ctx) {
-  // pick up vibe changes on resize/theme swap
-  PALETTE = readPalette();
+  function resize(ctx) {
+    // pick up vibe changes on resize/theme swap
+    PALETTE = readPalette();
 
-  // Use logical (CSS px) size, not device px.
-  const dpr = ctx.dpr || 1;
-  const W = Math.max(1, Math.round(ctx.w / dpr));
-  const H = Math.max(1, Math.round(ctx.h / dpr));
+    // Use logical (CSS px) size, not device px.
+    const dpr = ctx.dpr || 1;
+    const W = Math.max(1, Math.round(ctx.w / dpr));
+    const H = Math.max(1, Math.round(ctx.h / dpr));
 
-  codeWidthPx = Math.floor(W * 0.70) | 0;
-  lineH = Math.round(fontPx * 1.25) || 18;
+    codeWidthPx = Math.floor(W * 0.7) | 0;
+    lineH = Math.round(fontPx * 1.25) || 18;
 
-  // Lines visible should also be based on CSS px height.
-  codeLinesVisible = Math.max(4, Math.floor(H / lineH));
-  outLinesVisible = codeLinesVisible;
-}
-
+    // Lines visible should also be based on CSS px height.
+    codeLinesVisible = Math.max(4, Math.floor(H / lineH));
+    outLinesVisible = codeLinesVisible;
+  }
 
   /**
    * Clear canvas and internal buffers.
