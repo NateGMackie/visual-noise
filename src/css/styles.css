@@ -146,6 +146,17 @@ button {
   }
 }
 
+#awakeBtn {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+/* When ON: white background, black text (matches Pause) */
+#awakeBtn.is-awake {
+  background: #fff;
+  color: #000;
+  border-color: currentColor; /* ensures visible border if present */
+}
+
 /* When visible, they slide up and accept interaction */
 #controls.is-visible {
   transform: translateY(0);
@@ -157,6 +168,21 @@ button {
 body.has-controls-visible {
   padding-bottom: calc(var(--controls-height, 64px) + var(--controls-safe-pad));
 }
+
+/* Pause button default (keeps your existing styles) */
+#pauseBtn {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+/* When paused: white background, black text */
+#pauseBtn.is-paused {
+  background: #fff;
+  color: #000;
+  /* optional: ensure a visible border when inverted */
+  border-color: currentColor;
+}
+
+
 
 /* Mobile-only, invisible bottom-edge reveal zone */
 /* Bottom-edge reveal hit area (always interactive) */
@@ -185,7 +211,7 @@ body.has-controls-visible {
   padding: 6px 10px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.7);
-  color: #fff;
+  color: #C0C0C0;
   font:
     12px/1.2 system-ui,
     sans-serif;

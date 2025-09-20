@@ -50,31 +50,47 @@ function makeClickable(el, onActivate) {
 
 // ---- Keep Awake button sync ----
 /**
- * Sync the Keep Awake toggle text and aria state with WakeLock.isEnabled().
+ * Sync the Keep Awake button visual state with WakeLock.isEnabled().
+ * Keeps the label as "Keep Awake" at all times; when ON, it inverts colors.
  * @returns {void}
  */
 export function syncAwakeButton() {
   const btn = document.getElementById('awakeBtn');
   if (!btn) return;
   const on = !!WakeLock.isEnabled();
-  btn.textContent = on ? 'Keep Awake: On' : 'Keep Awake: Off';
+
+  // Label stays constant
+  btn.textContent = 'Awake';
+
+  // Accessibility + state
   btn.setAttribute('aria-pressed', String(on));
   btn.title = 'Toggle screen wake lock (A)';
+
+  // Visual state class for CSS
+  btn.classList.toggle('is-awake', on);
 }
 
-// Exposed so keyboard handler can keep the label in sync.
 /**
- * Sync the Pause/Resume button text and aria state with cfg.paused.
+ * Sync the Pause button visual state with cfg.paused.
+ * Keeps the label as "Pause" at all times; when paused, it inverts colors.
  * @returns {void}
  */
 export function syncPauseButton() {
   const btn = document.getElementById('pauseBtn');
   if (!btn) return;
   const paused = !!cfg.paused;
-  btn.textContent = paused ? 'Resume' : 'Pause';
+
+  // Label stays "Pause" regardless of state
+  btn.textContent = 'Pause';
+
+  // Accessibility + state hooks
   btn.setAttribute('aria-pressed', String(paused));
-  btn.title = paused ? 'Resume (P)' : 'Pause (P)';
+  btn.title = 'Pause (P)';
+
+  // Visual state class for CSS to target
+  btn.classList.toggle('is-paused', paused);
 }
+
 
 /**
  * Initialize footer menu interactions (labels + buttons).
