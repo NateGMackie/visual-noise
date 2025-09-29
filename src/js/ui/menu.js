@@ -14,8 +14,19 @@ import {
 import { registry } from '../modes/index.js';
 import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
 import { WakeLock } from '../lib/wake_lock.js';
+import { toggleScanlines, toggleFlicker } from '../ui/effects.js';
+import { notify, NOTIFY } from './notify.js';
 
-// Safe localStorage alias (avoids no-undef and handles privacy modes)
+/**
+ * Local typedef aliases so eslint-plugin-jsdoc recognizes DOM types.
+ * They point at the real browser globals via `globalThis`.
+ * @typedef {globalThis.HTMLElement} HTMLElement
+ * @typedef {globalThis.Event} DomEvent
+ */
+
+/* ----------------------------------------
+   Safe localStorage alias
+---------------------------------------- */
 const LS = (() => {
   try {
     return globalThis.localStorage || window.localStorage;
@@ -24,13 +35,15 @@ const LS = (() => {
   }
 })();
 
-// Small helper (duplicated here so this file is self-contained)
+/* ----------------------------------------
+   Small helper: make any element clickable
+---------------------------------------- */
 /**
- * Make an element behave like a button and call a handler on activation.
+ * Make an element behave like a button and invoke a handler on activation.
  * Adds keyboard support (Enter/Space) and a pointer cursor.
- * @param {globalThis.HTMLElement | null} el - The element to make clickable (label/div/span/etc.).
- * @param {(e: globalThis.Event) => void} onActivate - Handler invoked on click or keyboard activation.
- * @returns {void}
+ * @param {HTMLElement | null} el - Element to make clickable (label/div/span/etc.). If null, does nothing.
+ * @param {(e: DomEvent) => void} onActivate - Handler invoked on click or keyboard activation.
+ * @returns {void} - No return value.
  */
 function makeClickable(el, onActivate) {
   if (!el) return;
@@ -48,57 +61,99 @@ function makeClickable(el, onActivate) {
   });
 }
 
-// ---- Keep Awake button sync ----
+/* ----------------------------------------
+   Button sync helpers (fixed labels + aria)
+---------------------------------------- */
 /**
- * Sync the Keep Awake toggle text and aria state with WakeLock.isEnabled().
- * @returns {void}
+ * Sync the Keep Awake button visual/aria state with WakeLock.isEnabled().
+ * @returns {void} - No return value.
  */
 export function syncAwakeButton() {
   const btn = document.getElementById('awakeBtn');
   if (!btn) return;
   const on = !!WakeLock.isEnabled();
-  btn.textContent = on ? 'Keep Awake: On' : 'Keep Awake: Off';
+
+  btn.textContent = 'Awake';
   btn.setAttribute('aria-pressed', String(on));
   btn.title = 'Toggle screen wake lock (A)';
+  btn.classList.toggle('is-awake', on);
 }
 
-// Exposed so keyboard handler can keep the label in sync.
 /**
- * Sync the Pause/Resume button text and aria state with cfg.paused.
- * @returns {void}
+ * Sync the Pause button visual/aria state with cfg.paused.
+ * @returns {void} - No return value.
  */
 export function syncPauseButton() {
   const btn = document.getElementById('pauseBtn');
   if (!btn) return;
   const paused = !!cfg.paused;
-  btn.textContent = paused ? 'Resume' : 'Pause';
+
+  btn.textContent = 'Pause';
   btn.setAttribute('aria-pressed', String(paused));
-  btn.title = paused ? 'Resume (P)' : 'Pause (P)';
+  btn.title = 'Pause (P)';
+  btn.classList.toggle('is-paused', paused);
 }
 
 /**
+ * Sync the Scanlines button visual/aria state with the presence of .scanlines on <body>.
+ * @returns {void} - No return value.
+ */
+export function syncScanlinesButton() {
+  const btn = document.getElementById('scanBtn');
+  if (!btn) return;
+  const on = document.body.classList.contains('scanlines');
+
+  btn.textContent = 'Scanlines';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.title = 'Toggle CRT scanlines (S)';
+  btn.classList.toggle('is-scanlines', on);
+}
+
+/**
+ * Sync the Flicker button visual/aria state with the presence of .flicker on <body>.
+ * @returns {void} - No return value.
+ */
+export function syncFlickerButton() {
+  const btn = document.getElementById('flickerBtn');
+  if (!btn) return;
+  const on = document.body.classList.contains('flicker');
+
+  btn.textContent = 'Flicker';
+  btn.setAttribute('aria-pressed', String(on));
+  btn.title = 'Toggle screen flicker (V)';
+  btn.classList.toggle('is-flicker', on);
+}
+
+/* ----------------------------------------
+   Init footer/menu wiring
+---------------------------------------- */
+/**
  * Initialize footer menu interactions (labels + buttons).
- * @returns {void}
+ * @returns {void} - No return value.
  */
 export function initMenu() {
-  // Elements
+  // Name elements
   const modeName = document.getElementById('genreName') || document.getElementById('modeName');
   const typeName = document.getElementById('styleName') || document.getElementById('typeName');
   const themeName = document.getElementById('vibeName') || document.getElementById('themeName');
 
+  // Clickable label containers
   const modeLabelEl = modeName?.closest('label') || modeName;
   const styleLabelEl = typeName?.closest('label') || typeName;
   const themeLabelEl = themeName?.closest('label') || themeName;
 
+  // Buttons
   const speedUpBtn = document.getElementById('speedUp');
   const speedDownBtn = document.getElementById('speedDown');
   const pauseBtn = document.getElementById('pauseBtn');
   const clearBtn = document.getElementById('clearBtn');
   const awakeBtn = document.getElementById('awakeBtn');
+  const scanBtn = document.getElementById('scanBtn');
+  const flickerBtn = document.getElementById('flickerBtn');
 
   const modes = Object.keys(registry);
 
-  // Label updaters (local copies; UI also has its own for keyboard)
+  // Label updaters
   const setModeLabel = () => {
     const { familyLabel, typeLabel } = labelsForMode(cfg.persona);
     if (modeName) modeName.textContent = familyLabel;
@@ -134,7 +189,7 @@ export function initMenu() {
     const nextFamily = byFamily[nextFamIdx];
     if (!nextFamily || !nextFamily.modes.length) return;
 
-    // Prefer to keep the same type in the next family; fallback to first mode
+    // Prefer same type in next family; fallback to first
     const candidate =
       nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) || nextFamily.modes[0];
 
@@ -170,8 +225,9 @@ export function initMenu() {
     const curFam = meta[currentMode]?.familyLabel || '';
     const curType = meta[currentMode]?.typeLabel || '';
     const famIdx = Math.max(0, familyList.indexOf(curFam));
+
     const typesInFam = Array.from(
-      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || '')).values()
+      new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
     ).filter(Boolean);
     if (!typesInFam.length) return;
 
@@ -195,7 +251,7 @@ export function initMenu() {
   if (speedDownBtn) speedDownBtn.onclick = () => decSpeed();
 
   if (pauseBtn) {
-    syncPauseButton(); // init label
+    syncPauseButton();
     pauseBtn.onclick = () => {
       togglePause();
       syncPauseButton();
@@ -204,8 +260,8 @@ export function initMenu() {
 
   if (clearBtn) clearBtn.onclick = () => clearAll();
 
-  // Centralized toggle to keep logic consistent between click + hotkey
-  const toggleAwake = async () => {
+  // Keep Awake toggle centralization (click + hotkey share this)
+  const toggleAwakeCentral = async () => {
     const currentlyOn = WakeLock.isEnabled();
     let next = false;
     if (currentlyOn) {
@@ -214,7 +270,7 @@ export function initMenu() {
     } else {
       next = (await WakeLock.enable()) === true;
       if (!next) {
-        // If request failed (e.g., unsupported or denied), ensure it's off
+        // If request failed (e.g., unsupported/denied), ensure it's off
         WakeLock.disable();
       }
     }
@@ -229,28 +285,49 @@ export function initMenu() {
     const wantOn = stored === '1' || stored.toLowerCase() === 'true';
     (async () => {
       let effective = false;
-      if (wantOn) {
-        effective = (await WakeLock.enable()) === true;
-      }
+      if (wantOn) effective = (await WakeLock.enable()) === true;
       if (!wantOn) WakeLock.disable();
       LS?.setItem?.('vn.keepAwake', effective ? '1' : '0');
       emit('power', effective);
       syncAwakeButton();
     })();
 
-    // Toggle on click / keyboard
-    awakeBtn.onclick = toggleAwake;
+    // Click/keyboard
+    awakeBtn.onclick = toggleAwakeCentral;
     syncAwakeButton();
 
-    // Keep label honest when tab visibility/focus affects wake lock state
+    // Resync when visibility/focus affects WakeLock
     const resync = () => syncAwakeButton();
     document.addEventListener('visibilitychange', resync);
     window.addEventListener('focus', resync);
     window.addEventListener('blur', resync);
   }
 
-  // Keyboard hotkey: 'A' toggles Keep Awake (no modifiers)
-  // We avoid toggling when user is typing in inputs/textareas/contenteditable.
+  // --- Scanlines / Flicker buttons ---
+  if (scanBtn) {
+    syncScanlinesButton();
+    scanBtn.onclick = () => {
+      toggleScanlines();
+      const on = document.body.classList.contains('scanlines');
+      syncScanlinesButton();
+      // toast
+      notify(NOTIFY.state, `Scanlines: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    };
+  }
+
+  if (flickerBtn) {
+    syncFlickerButton();
+    flickerBtn.onclick = () => {
+      toggleFlicker();
+      const on = document.body.classList.contains('flicker');
+      syncFlickerButton();
+      // toast
+      notify(NOTIFY.state, `Flicker: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    };
+  }
+
+  // --- Optional: local hotkey for Awake ('a') if you want it here.
+  // If your global hotkeys already handle this, you can delete this block.
   document.addEventListener('keydown', (e) => {
     const tag = (e.target && (e.target.tagName || '')).toLowerCase();
     const editable =
@@ -258,13 +335,15 @@ export function initMenu() {
     if (editable) return;
     if (e.key && e.key.toLowerCase() === 'a' && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      toggleAwake();
+      toggleAwakeCentral();
     }
   });
 
   // Initial label paint
   setModeLabel();
-  window.requestAnimationFrame(setModeLabel);
+  window.requestAnimationFrame(setModeLabel); // ensure after first layout
   syncPauseButton();
   syncAwakeButton();
+  syncScanlinesButton();
+  syncFlickerButton();
 }

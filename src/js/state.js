@@ -2,17 +2,28 @@
 
 import { registry as modeRegistry } from './modes/index.js';
 import { DEFAULT_SPEED_MODEL } from './lib/speed.js';
+import { applyEffects } from './ui/effects.js'; // <-- missing import (fix)
 
-// -------------------------
-// Legacy-compatible config
-// -------------------------
+/**
+ * -------------------------
+ * Legacy-compatible config
+ * ------------------------
+ */
 export const cfg = {
   persona: 'liveOutput', // legacy "current mode" name (still honored)
   theme: 'classic',
   dock: 'bottom',
-  speed: 0.7, // legacy multiplier; we will keep this coherent with active.speed index
+  speed: 0.7, // legacy multiplier; will stay coherent with speed index
   paused: false, // running by default
+  fx: {
+    // <-- add defaults so callers have a shape
+    scanlines: false,
+    flicker: false,
+  },
 };
+
+// Apply global CRT overlays once on boot
+applyEffects(cfg.fx);
 
 // Simple event bus (unchanged)
 const listeners = new Map(); // event -> Set<fn>

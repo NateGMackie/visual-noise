@@ -4,14 +4,19 @@
 
 /**
  * Install global keyboard shortcuts for navigation and UI toggles.
+ * Notes:
+ * - Clear remains bound to "c" elsewhere in your app; we don't touch it here.
+ * - NEW: Scanlines = "s", Flicker = "v".
  * @param {object} root0 - Handlers and hooks for hotkeys.
  * @param {(dir:number)=>void} root0.cycleFamily - Switch family: -1 (prev) or +1 (next).
  * @param {(dir:number)=>void} root0.cycleFlavor - Switch flavor within current family: -1 or +1.
- * @param {(n:number)=>void} root0.selectModeNum - Select mode by number 1–10 (0 maps to 10).
+ * @param {(n:number)=>void}   root0.selectModeNum - Select mode by number 1–10 (0 maps to 10).
  * @param {(dir:number)=>void} root0.cycleTheme - Cycle theme/vibe: -1 (prev) or +1 (next).
- * @param {()=>void} root0.toggleControls - Toggle the controls HUD visibility.
+ * @param {()=>void}           root0.toggleControls - Toggle the controls HUD visibility.
  * @param {(html:string)=>void} [root0.setHudHelp] - Optional: render on-screen help HTML.
- * @param {()=>void} [root0.toggleAwake] - Optional: toggle Keep Awake (WakeLock enable/disable).
+ * @param {()=>void}           [root0.toggleAwake] - Optional: toggle Keep Awake (WakeLock).
+ * @param {()=>void}           [root0.toggleScanlines] - Optional: toggle CRT scanlines ("s").
+ * @param {()=>void}           [root0.toggleFlicker] - Optional: toggle flicker ("v").
  * @returns {void}
  */
 export function installHotkeys({
@@ -22,6 +27,8 @@ export function installHotkeys({
   toggleControls,
   setHudHelp,
   toggleAwake,
+  toggleScanlines,
+  toggleFlicker,
 }) {
   const helpHTML = `
     <div class="hud-help">
@@ -31,12 +38,15 @@ export function installHotkeys({
       <div><strong>Themes:</strong> t / Shift+T</div>
       <div><strong>Controls:</strong> m (toggle)</div>
       <div><strong>Keep&nbsp;Awake:</strong> a</div>
+      <div><strong>Scanlines:</strong> s</div>
+      <div><strong>Flicker:</strong> v</div>
+      <div><strong>Clear:</strong> c</div>
     </div>
   `;
   try {
     setHudHelp?.(helpHTML);
   } catch {
-    // ignore help renderer errors (non-fatal)
+    /* no-op */
   }
 
   const isInputLike = (el) => {
@@ -59,13 +69,13 @@ export function installHotkeys({
         try {
           fn?.(...args);
         } catch {
-          /* ignore errors in hotkey handlers */
+          /* ignore handler errors */
         }
         e.preventDefault();
         e.stopPropagation();
       };
 
-      // --- Controls toggle ---
+      // --- Controls toggle: m ---
       if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
 
       // --- Theme next/prev: t / Shift+T ---
@@ -95,7 +105,7 @@ export function installHotkeys({
         return doAct(selectModeNum, n);
       }
 
-      // --- Keep Awake toggle: only plain "a" (no shift/ctrl/alt/meta) ---
+      // --- Keep Awake toggle: plain "a" only ---
       if (
         typeof toggleAwake === 'function' &&
         !s &&
@@ -106,6 +116,16 @@ export function installHotkeys({
       ) {
         return doAct(toggleAwake);
       }
+
+      // --- NEW: CRT overlays ---
+      if (typeof toggleScanlines === 'function' && (k === 's' || k === 'S' || code === 'KeyS')) {
+        return doAct(toggleScanlines);
+      }
+      if (typeof toggleFlicker === 'function' && (k === 'v' || k === 'V' || code === 'KeyV')) {
+        return doAct(toggleFlicker);
+      }
+
+      // Note: "c" for Clear is handled elsewhere; we intentionally avoid binding it here.
     },
     { capture: true }
   );

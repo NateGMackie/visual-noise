@@ -14,7 +14,7 @@
     <link rel="manifest" href="/visual-noise/manifest.webmanifest" />
 
     <!-- Theme / address bar color -->
-    <meta name="theme-color" content="#0aff9d" />
+    <meta name="theme-color" content="#C0C0C0" />
 
     <!-- iOS "full-screen" / status bar -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -30,9 +30,9 @@
 
     <footer id="controls" class="controls" data-ignore-global-open>
       <div class="row labels">
-        <label>genre: <span id="genreName">crypto</span></label>
-        <label>style: <span id="styleName">crypto</span></label>
-        <label>vibe: <span id="vibeName">classic</span></label>
+        <label style="width: 30%">genre: <span id="genreName">crypto</span></label>
+        <label style="width: 30%">style: <span id="styleName">crypto</span></label>
+        <label style="width: 30%">vibe: <span id="vibeName">classic</span></label>
       </div>
 
       <div class="row actions">
@@ -43,22 +43,27 @@
           <button id="speedUp" type="button" aria-label="Increase speed" title="Speed +">
             Speed +
           </button>
+          <button id="scanBtn" type="button" title="Toggle CRT scanlines (S)">Scanlines</button>
+          <button id="flickerBtn" type="button" title="Toggle screen flicker (V)">Flicker</button>
         </div>
 
         <div class="group right">
-          <button id="pauseBtn" type="button" aria-pressed="false">Pause</button>
+          <button id="pauseBtn" type="button" aria-pressed="false" title="Pause (P)">Pause</button>
           <button
             id="awakeBtn"
             type="button"
             aria-pressed="false"
             title="Toggle screen wake lock (A)"
           >
-            Keep Awake: Off
+            Awake
           </button>
           <button id="clearBtn" type="button">Clear</button>
         </div>
       </div>
     </footer>
+
+    <!-- Bottom-edge reveal hit area -->
+    <div id="revealEdge" class="reveal-edge" aria-hidden="true"></div>
 
     <!-- Bottom-edge reveal hit area -->
     <div id="revealEdge" class="reveal-edge" aria-hidden="true"></div>
