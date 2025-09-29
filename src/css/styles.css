@@ -147,7 +147,10 @@ button {
 }
 
 #awakeBtn {
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 /* When ON: white background, black text (matches Pause) */
@@ -171,7 +174,10 @@ body.has-controls-visible {
 
 /* Pause button default (keeps your existing styles) */
 #pauseBtn {
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 /* When paused: white background, black text */
@@ -193,7 +199,7 @@ body.has-controls-visible {
 }
 
 /* You already have these: pressed -> white */
-#controls button[aria-pressed="true"] {
+#controls button[aria-pressed='true'] {
   background: #fff;
   color: #000;
 }
@@ -225,7 +231,7 @@ body.has-controls-visible {
   padding: 6px 10px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.7);
-  color: #C0C0C0;
+  color: #c0c0c0;
   font:
     12px/1.2 system-ui,
     sans-serif;
@@ -405,26 +411,24 @@ body.has-controls-visible .pos-bottom-right {
 
 /* ===== CRT scanlines overlay (visible on pure black) ===== */
 .scanlines::after {
-  content: "";
+  content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
 
   /* Heavier, always-visible lines (no blend dependency) */
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.22) 0px,   /* line tint */
-      rgba(255, 255, 255, 0.22) 1px,   /* 1px line */
-      transparent 1px,
-      transparent 3px                  /* 2px gap => 3px cycle */
-    );
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.22) 0px,
+    /* line tint */ rgba(255, 255, 255, 0.22) 1px,
+    /* 1px line */ transparent 1px,
+    transparent 3px /* 2px gap => 3px cycle */
+  );
 
   /* Keep it obvious but not overwhelming */
   opacity: 0.18;
-  mix-blend-mode: screen;  /* remove blend—was disappearing on #000 */
+  mix-blend-mode: screen; /* remove blend—was disappearing on #000 */
 
   /* Above canvas (z:0), below footer (z:2000) and toasts */
   z-index: 1500;
 }
-

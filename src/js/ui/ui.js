@@ -12,11 +12,16 @@ import {
 } from '../state.js';
 import { registry } from '../modes/index.js';
 import { themeNames, setThemeByName, cycleTheme } from '../themes.js';
-import { initMenu, syncPauseButton, syncAwakeButton } from './menu.js';
+import {
+  initMenu,
+  syncPauseButton,
+  syncAwakeButton,
+  syncScanlinesButton,
+  syncFlickerButton,
+} from './menu.js';
 import { installHotkeys } from './hotkeys.js';
 import { WakeLock } from '../lib/wake_lock.js';
 import { toggleScanlines, toggleFlicker } from './effects.js';
-import { syncScanlinesButton, syncFlickerButton } from './menu.js';
 import { notify, NOTIFY } from './notify.js';
 
 // --- ControlsVisibility shim ---
@@ -317,36 +322,33 @@ export function initUI() {
     syncAwakeButton();
   };
 
+  // ...
 
-
-// ...
-
-installHotkeys({
-  cycleFamily,
-  cycleFlavor,
-  selectModeNum,
-  cycleTheme: cycleVibe,
-  toggleControls,
-  setHudHelp: (html) => {
-    const el = document.getElementById('hudHelp');
-    if (el) el.innerHTML = html;
-  },
-  toggleAwake,
-  // NEW: S / V hotkeys -> toggle + sync + toast
-  toggleScanlines: () => {
-    toggleScanlines();
-    const on = document.body.classList.contains('scanlines');
-    syncScanlinesButton();
-    notify(NOTIFY.state, `Scanlines: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
-  },
-  toggleFlicker: () => {
-    toggleFlicker();
-    const on = document.body.classList.contains('flicker');
-    syncFlickerButton();
-    notify(NOTIFY.state, `Flicker: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
-  },
-});
-
+  installHotkeys({
+    cycleFamily,
+    cycleFlavor,
+    selectModeNum,
+    cycleTheme: cycleVibe,
+    toggleControls,
+    setHudHelp: (html) => {
+      const el = document.getElementById('hudHelp');
+      if (el) el.innerHTML = html;
+    },
+    toggleAwake,
+    // NEW: S / V hotkeys -> toggle + sync + toast
+    toggleScanlines: () => {
+      toggleScanlines();
+      const on = document.body.classList.contains('scanlines');
+      syncScanlinesButton();
+      notify(NOTIFY.state, `Scanlines: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    },
+    toggleFlicker: () => {
+      toggleFlicker();
+      const on = document.body.classList.contains('flicker');
+      syncFlickerButton();
+      notify(NOTIFY.state, `Flicker: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    },
+  });
 
   // --- Minimal supplemental keys not handled by hotkeys.js ---
   window.addEventListener('keydown', (e) => {

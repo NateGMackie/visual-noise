@@ -17,24 +17,33 @@ import { WakeLock } from '../lib/wake_lock.js';
 import { toggleScanlines, toggleFlicker } from '../ui/effects.js';
 import { notify, NOTIFY } from './notify.js';
 
+/**
+ * Local typedef aliases so eslint-plugin-jsdoc recognizes DOM types.
+ * They point at the real browser globals via `globalThis`.
+ * @typedef {globalThis.HTMLElement} HTMLElement
+ * @typedef {globalThis.Event} DomEvent
+ */
 
 /* ----------------------------------------
    Safe localStorage alias
 ---------------------------------------- */
 const LS = (() => {
-  try { return globalThis.localStorage || window.localStorage; }
-  catch { return null; }
+  try {
+    return globalThis.localStorage || window.localStorage;
+  } catch {
+    return null;
+  }
 })();
 
 /* ----------------------------------------
    Small helper: make any element clickable
 ---------------------------------------- */
 /**
- * Make an element behave like a button and call a handler on activation.
+ * Make an element behave like a button and invoke a handler on activation.
  * Adds keyboard support (Enter/Space) and a pointer cursor.
- * @param {HTMLElement | null} el
- * @param {(e: Event) => void} onActivate
- * @returns {void}
+ * @param {HTMLElement | null} el - Element to make clickable (label/div/span/etc.). If null, does nothing.
+ * @param {(e: DomEvent) => void} onActivate - Handler invoked on click or keyboard activation.
+ * @returns {void} - No return value.
  */
 function makeClickable(el, onActivate) {
   if (!el) return;
@@ -55,6 +64,10 @@ function makeClickable(el, onActivate) {
 /* ----------------------------------------
    Button sync helpers (fixed labels + aria)
 ---------------------------------------- */
+/**
+ * Sync the Keep Awake button visual/aria state with WakeLock.isEnabled().
+ * @returns {void} - No return value.
+ */
 export function syncAwakeButton() {
   const btn = document.getElementById('awakeBtn');
   if (!btn) return;
@@ -66,6 +79,10 @@ export function syncAwakeButton() {
   btn.classList.toggle('is-awake', on);
 }
 
+/**
+ * Sync the Pause button visual/aria state with cfg.paused.
+ * @returns {void} - No return value.
+ */
 export function syncPauseButton() {
   const btn = document.getElementById('pauseBtn');
   if (!btn) return;
@@ -77,6 +94,10 @@ export function syncPauseButton() {
   btn.classList.toggle('is-paused', paused);
 }
 
+/**
+ * Sync the Scanlines button visual/aria state with the presence of .scanlines on <body>.
+ * @returns {void} - No return value.
+ */
 export function syncScanlinesButton() {
   const btn = document.getElementById('scanBtn');
   if (!btn) return;
@@ -88,6 +109,10 @@ export function syncScanlinesButton() {
   btn.classList.toggle('is-scanlines', on);
 }
 
+/**
+ * Sync the Flicker button visual/aria state with the presence of .flicker on <body>.
+ * @returns {void} - No return value.
+ */
 export function syncFlickerButton() {
   const btn = document.getElementById('flickerBtn');
   if (!btn) return;
@@ -104,27 +129,27 @@ export function syncFlickerButton() {
 ---------------------------------------- */
 /**
  * Initialize footer menu interactions (labels + buttons).
- * @returns {void}
+ * @returns {void} - No return value.
  */
 export function initMenu() {
   // Name elements
-  const modeName  = document.getElementById('genreName') || document.getElementById('modeName');
-  const typeName  = document.getElementById('styleName') || document.getElementById('typeName');
-  const themeName = document.getElementById('vibeName')  || document.getElementById('themeName');
+  const modeName = document.getElementById('genreName') || document.getElementById('modeName');
+  const typeName = document.getElementById('styleName') || document.getElementById('typeName');
+  const themeName = document.getElementById('vibeName') || document.getElementById('themeName');
 
   // Clickable label containers
-  const modeLabelEl  = modeName?.closest('label')  || modeName;
-  const styleLabelEl = typeName?.closest('label')  || typeName;
+  const modeLabelEl = modeName?.closest('label') || modeName;
+  const styleLabelEl = typeName?.closest('label') || typeName;
   const themeLabelEl = themeName?.closest('label') || themeName;
 
   // Buttons
-  const speedUpBtn   = document.getElementById('speedUp');
+  const speedUpBtn = document.getElementById('speedUp');
   const speedDownBtn = document.getElementById('speedDown');
-  const pauseBtn     = document.getElementById('pauseBtn');
-  const clearBtn     = document.getElementById('clearBtn');
-  const awakeBtn     = document.getElementById('awakeBtn');
-  const scanBtn      = document.getElementById('scanBtn');
-  const flickerBtn   = document.getElementById('flickerBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const awakeBtn = document.getElementById('awakeBtn');
+  const scanBtn = document.getElementById('scanBtn');
+  const flickerBtn = document.getElementById('flickerBtn');
 
   const modes = Object.keys(registry);
 
@@ -146,16 +171,18 @@ export function initMenu() {
   // Genre/Mode: cycle families (Shift+click = previous)
   makeClickable(modeLabelEl, (e) => {
     const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
-    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(Boolean);
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(
+      Boolean
+    );
     const byFamily = familyList.map((fam) => ({
       family: fam,
       modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
     }));
 
     const currentMode = cfg.persona;
-    const curFam  = meta[currentMode]?.familyLabel || '';
-    const curType = meta[currentMode]?.typeLabel  || '';
-    const famIdx  = Math.max(0, familyList.indexOf(curFam));
+    const curFam = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel || '';
+    const famIdx = Math.max(0, familyList.indexOf(curFam));
 
     const dir = e?.shiftKey ? -1 : +1;
     const nextFamIdx = (famIdx + (dir > 0 ? 1 : familyList.length - 1)) % familyList.length;
@@ -163,7 +190,8 @@ export function initMenu() {
     if (!nextFamily || !nextFamily.modes.length) return;
 
     // Prefer same type in next family; fallback to first
-    const candidate = nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) || nextFamily.modes[0];
+    const candidate =
+      nextFamily.modes.find((m) => meta[m]?.typeLabel === curType) || nextFamily.modes[0];
 
     setMode(candidate);
     setModeLabel();
@@ -185,16 +213,18 @@ export function initMenu() {
   // Style: cycle within current family (Shift+click = previous)
   makeClickable(styleLabelEl, (e) => {
     const meta = Object.fromEntries(modes.map((m) => [m, labelsForMode(m)]));
-    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(Boolean);
+    const familyList = Array.from(new Set(modes.map((m) => meta[m]?.familyLabel || ''))).filter(
+      Boolean
+    );
     const byFamily = familyList.map((fam) => ({
       family: fam,
       modes: modes.filter((m) => (meta[m]?.familyLabel || '') === fam),
     }));
 
     const currentMode = cfg.persona;
-    const curFam  = meta[currentMode]?.familyLabel || '';
-    const curType = meta[currentMode]?.typeLabel  || '';
-    const famIdx  = Math.max(0, familyList.indexOf(curFam));
+    const curFam = meta[currentMode]?.familyLabel || '';
+    const curType = meta[currentMode]?.typeLabel || '';
+    const famIdx = Math.max(0, familyList.indexOf(curFam));
 
     const typesInFam = Array.from(
       new Set(byFamily[famIdx]?.modes.map((m) => meta[m]?.typeLabel || ''))
@@ -203,7 +233,8 @@ export function initMenu() {
 
     const dir = e?.shiftKey ? -1 : +1;
     const typeIdx = Math.max(0, typesInFam.indexOf(curType));
-    const nextType = typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
+    const nextType =
+      typesInFam[(typeIdx + (dir > 0 ? 1 : typesInFam.length - 1)) % typesInFam.length];
 
     const candidate =
       byFamily[famIdx].modes.find((m) => meta[m]?.typeLabel === nextType) ||
@@ -216,7 +247,7 @@ export function initMenu() {
   });
 
   // --- Buttons ---
-  if (speedUpBtn)   speedUpBtn.onclick   = () => incSpeed();
+  if (speedUpBtn) speedUpBtn.onclick = () => incSpeed();
   if (speedDownBtn) speedDownBtn.onclick = () => decSpeed();
 
   if (pauseBtn) {
@@ -272,34 +303,35 @@ export function initMenu() {
     window.addEventListener('blur', resync);
   }
 
-// --- Scanlines / Flicker buttons ---
-if (scanBtn) {
-  syncScanlinesButton();
-  scanBtn.onclick = () => {
-    toggleScanlines();
-    const on = document.body.classList.contains('scanlines');
+  // --- Scanlines / Flicker buttons ---
+  if (scanBtn) {
     syncScanlinesButton();
-    // toast
-    notify(NOTIFY.state, `Scanlines: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
-  };
-}
+    scanBtn.onclick = () => {
+      toggleScanlines();
+      const on = document.body.classList.contains('scanlines');
+      syncScanlinesButton();
+      // toast
+      notify(NOTIFY.state, `Scanlines: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    };
+  }
 
-if (flickerBtn) {
-  syncFlickerButton();
-  flickerBtn.onclick = () => {
-    toggleFlicker();
-    const on = document.body.classList.contains('flicker');
+  if (flickerBtn) {
     syncFlickerButton();
-    // toast
-    notify(NOTIFY.state, `Flicker: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
-  };
-}
+    flickerBtn.onclick = () => {
+      toggleFlicker();
+      const on = document.body.classList.contains('flicker');
+      syncFlickerButton();
+      // toast
+      notify(NOTIFY.state, `Flicker: ${on ? 'ON' : 'OFF'}`, { coalesce: true });
+    };
+  }
 
   // --- Optional: local hotkey for Awake ('a') if you want it here.
   // If your global hotkeys already handle this, you can delete this block.
   document.addEventListener('keydown', (e) => {
     const tag = (e.target && (e.target.tagName || '')).toLowerCase();
-    const editable = tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable);
+    const editable =
+      tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable);
     if (editable) return;
     if (e.key && e.key.toLowerCase() === 'a' && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
