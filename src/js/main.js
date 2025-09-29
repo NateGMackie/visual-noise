@@ -9,6 +9,7 @@ import {
   modular,
   applyMono,
 } from './lib/index.js';
+import { applyEffects } from './ui/effects.js';
 
 // App container on window (match your existing pattern)
 const app = window.app || { state: {}, ui: {}, events: window.events };

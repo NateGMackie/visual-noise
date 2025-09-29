@@ -182,7 +182,21 @@ body.has-controls-visible {
   border-color: currentColor;
 }
 
+/* Default (not pressed) = black for these four buttons */
+#pauseBtn,
+#awakeBtn,
+#scanBtn,
+#flickerBtn {
+  background: #000;
+  color: var(--control-fg);
+  border-color: #444;
+}
 
+/* You already have these: pressed -> white */
+#controls button[aria-pressed="true"] {
+  background: #fff;
+  color: #000;
+}
 
 /* Mobile-only, invisible bottom-edge reveal zone */
 /* Bottom-edge reveal hit area (always interactive) */
@@ -388,3 +402,29 @@ body.has-controls-visible .pos-bottom-right {
     transform: none;
   }
 }
+
+/* ===== CRT scanlines overlay (visible on pure black) ===== */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+
+  /* Heavier, always-visible lines (no blend dependency) */
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.22) 0px,   /* line tint */
+      rgba(255, 255, 255, 0.22) 1px,   /* 1px line */
+      transparent 1px,
+      transparent 3px                  /* 2px gap => 3px cycle */
+    );
+
+  /* Keep it obvious but not overwhelming */
+  opacity: 0.18;
+  mix-blend-mode: screen;  /* remove blend—was disappearing on #000 */
+
+  /* Above canvas (z:0), below footer (z:2000) and toasts */
+  z-index: 1500;
+}
+
