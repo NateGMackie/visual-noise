@@ -1,14 +1,58 @@
 // src/js/themes.js
 import { cfg } from './state.js';
 
-// Canonical palette definitions (vibe → CSS vars)
+
 const THEMES = {
-  classic: { '--bg': '#000', '--fg': '#03ffaf', '--accent': '#0ff' },
-  mainframe: { '--bg': '#0a0700', '--fg': '#ffd18a', '--accent': '#ffae00' },
-  msdos: { '--bg': '#1F1F1F', '--fg': '#C0C0C0', '--accent': '#FFFFFF' },
-  clu: { '--bg': '#001318', '--fg': '#9de7ff', '--accent': '#2ad1ff' },
-  skynet: { '--bg': '#0a0000', '--fg': '#ff4d4d', '--accent': '#ff0000' },
-  deepthought: { '--bg': '#0a0010', '--fg': '#e0b3ff', '--accent': '#aa33ff' },
+  classic: {
+    '--bg': '#020800ff',
+    '--fg': '#03ffaf',
+    '--accent': '#00ffff',
+    '--scanline-dark': '#001003',
+    '--scanline-light': '#002016',
+  },
+  mainframe: {
+    '--bg': '#0a0700',
+    '--fg': '#ffd18a',
+    '--accent': '#ffae00',
+    '--scanline-dark': '#120900',
+    '--scanline-light': '#1f1200',
+  },
+  msdos: {
+    '--bg': '#1d1d1dff',
+    '--fg': '#C0C0C0',
+    '--accent': '#FFFFFF',
+    '--scanline-dark': '#151515',
+    '--scanline-light': '#262626',
+  },
+  clu: {
+    '--bg': '#001318',
+    '--fg': '#9de7ff',
+    '--accent': '#2ad1ff',
+    '--scanline-dark': '#000a0c',
+    '--scanline-light': '#021e27',
+  },
+  skynet: {
+    '--bg': '#0a0000',
+    '--fg': '#ff4d4d',
+    '--accent': '#ff0000',
+    '--scanline-dark': '#120000',
+    '--scanline-light': '#1e0000',
+  },
+  deepthought: {
+    '--bg': '#0a0010',
+    '--fg': '#e0b3ff',
+    '--accent': '#aa33ff',
+    '--scanline-dark': '#120018',
+    '--scanline-light': '#1e0026',
+  },
+  // NEW: Game Boy (DMG-01) vibe
+  gameboy: {
+    '--bg': '#9bbc0f',     // pea-green screen base
+    '--fg': '#0f380f',     // dark pixel green/black
+    '--accent': '#8bac0f', // lighter highlight green
+    '--scanline-dark': '#0a2a0a', // subtle deep green stripe
+    '--scanline-light': '#b9d64d', // faint light green stripe
+  },
 };
 
 const LABELS = {
@@ -18,22 +62,29 @@ const LABELS = {
   clu: 'CLU',
   skynet: 'skynet',
   deepthought: 'deep thought',
+  gameboy: 'Game Boy',
 };
 
 /**
  * Normalize an arbitrary input into a known vibe key.
- * Accepts variants like "MS-DOS" / "ms dos" → "msdos", "deep thought" → "deepthought".
+ * Accepts variants like "MS-DOS" / "ms dos" → "msdos",
+ * "deep thought" → "deepthought", "game boy" → "gameboy".
  * @param {string} name - Vibe name to normalize.
  * @returns {string} Canonical key present in {@link THEMES} (defaults to "classic").
  */
 function normalizeVibe(name) {
   if (!name) return 'classic';
   const s = String(name).trim().toLowerCase();
+
   if (s === 'deep thought' || s === 'deep_thought') return 'deepthought';
   if (s === 'ms-dos' || s === 'ms dos') return 'msdos';
+  if (s === 'game boy' || s === 'game_boy') return 'gameboy';
+
   if (THEMES[s]) return s;
+
   const collapsed = s.replace(/[\s_-]+/g, '');
   if (THEMES[collapsed]) return collapsed;
+
   return 'classic';
 }
 
