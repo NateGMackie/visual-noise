@@ -45,13 +45,13 @@ body {
   min-height: 100dvh; /* for mobile */
   min-width: 100dvw; /* for mobile */
   overflow: hidden;
-  background: var(--bg);
+  background: #000;
 }
 
 #canvas {
   position: fixed;
   inset: 0;
-  background: var(--bg);
+  background: #000;
   display: block;
   width: 100%;
   min-width: 100dvw;
