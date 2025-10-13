@@ -5,9 +5,18 @@
 // Style: Split screen ~70/30 (code editor + live output)
 
 /**
- * Local typedef to satisfy jsdoc/no-undefined-types in environments
- * where DOM lib typings aren't available to the linter.
+ * Local typedefs so jsdoc/no-undefined-types doesn't complain in projects
+ * that don't load DOM lib types.
  * @typedef {any} CanvasRenderingContext2D
+ * @typedef {object} RenderCtx
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (already DPR-scaled)
+ * @property {number} w - Canvas width in device pixels
+ * @property {number} h - Canvas height in device pixels
+ * @property {number} dpr - Device pixel ratio used for transforms
+ * @property {number} [elapsed] - Time since last frame in ms (0 while paused)
+ * @property {number} [dt] - Time since last frame in seconds (0 while paused)
+ * @property {boolean} [paused] - Whether animation is paused
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6)
  */
 
 import { modular } from '../lib/typography.js';
@@ -55,11 +64,14 @@ export const coding = (() => {
   const MAX_CODE_LINES = 600;
   const MAX_OUT_LINES = 300;
 
+  // Fixed left-pane background
+  const LEFT_BG = '#000000';
+
   // ---------- vibe-aware palette (robust fallbacks) ----------
   /**
    * Read a CSS variable with a JS fallback.
-   * @param {string} name - CSS variable name, e.g. "--output-fg".
-   * @param {string} fallback - Fallback value if the variable is unset/empty.
+   * @param {string} name - CSS variable name (e.g., "--output-fg").
+   * @param {string} fallback - Value to use if the variable is empty/unset.
    * @returns {string} Resolved CSS value.
    */
   function cssVar(name, fallback) {
@@ -68,11 +80,10 @@ export const coding = (() => {
   }
 
   /**
-   * Read the current palette from the active vibe/theme.
-   * @returns {Record<string,string>} A palette of named colors for this mode.
+   * Build the current palette from vibe/theme variables with safe fallbacks.
+   * @returns {{keyword:string,string:string,number:string,comment:string,punct:string,ident:string,divider:string,output:string,rightBg:string}} Palette for drawing.
    */
   function readPalette() {
-    // Try multiple vibe-driven vars before falling back to document colors.
     const bodyColor = (window.getComputedStyle(document.body).color || '').trim() || '#ffffff';
     const doc = window.getComputedStyle(document.documentElement);
     const varOr = (...names) => {
@@ -88,7 +99,7 @@ export const coding = (() => {
     return {
       // Left syntax colors
       keyword: cssVar('--code-keyword', '#e0b3ff'),
-      string: cssVar('--code-string', '#fff'),
+      string: cssVar('--code-string', '#ffffff'),
       number: cssVar('--code-number', '#ffd18a'),
       comment: cssVar('--code-comment', '#03ffaf'),
       punct: cssVar('--code-punct', '#cfcfcf'),
@@ -96,6 +107,7 @@ export const coding = (() => {
       // Layout + right side mono color (vibe-driven)
       divider: cssVar('--pane-divider', '#3a3a3a'),
       output: outputMono,
+      rightBg: cssVar('--bg', '#000000'), // right pane follows vibe
     };
   }
   let PALETTE = null;
@@ -116,8 +128,8 @@ export const coding = (() => {
   );
 
   /**
-   * Tokenize a JS-ish line for lightweight syntax coloring.
-   * @param {string} line - Single source line to tokenize.
+   * Tokenize a JS-ish source line for lightweight syntax coloring.
+   * @param {string} line - Single line of source text.
    * @returns {{text:string,type:string}[]} Array of tokens with type tags.
    */
   function tokenize(line) {
@@ -146,10 +158,10 @@ export const coding = (() => {
 
   /**
    * Draw a syntax-highlighted line at (x,y).
-   * @param {CanvasRenderingContext2D} g - 2D context.
-   * @param {string} line - Line to render.
-   * @param {number} x - Left position in px.
-   * @param {number} y - Top position in px.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {string} line - The source line to render.
+   * @param {number} x - Left position in CSS pixels.
+   * @param {number} y - Top position in CSS pixels.
    * @returns {void}
    */
   function drawHighlightedLine(g, line, x, y) {
@@ -224,10 +236,10 @@ export const coding = (() => {
 
   // ---------- helpers ----------
   /**
-   * Push with ring buffer cap.
+   * Push with ring-buffer cap (shifts from head on overflow).
    * @param {string[]} buf - Target buffer.
    * @param {string} line - Line to append.
-   * @param {number} cap - Max size; trims from head when exceeded.
+   * @param {number} cap - Max buffer size.
    * @returns {void}
    */
   function pushCapped(buf, line, cap) {
@@ -239,7 +251,7 @@ export const coding = (() => {
    * Pick a random element from an array.
    * @template T
    * @param {T[]} arr - Source array.
-   * @returns {T} A randomly selected element from the array.
+   * @returns {T} A random element from the array.
    */
   function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
@@ -247,22 +259,22 @@ export const coding = (() => {
 
   /**
    * Draw right-pane log output using the vibe’s mono color.
-   * @param {CanvasRenderingContext2D} g - 2D context.
-   * @param {string[]} lines - Output buffer.
-   * @param {number} x - Left position in px.
-   * @param {number} y - Top position in px.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {string[]} lines - Output buffer to render.
+   * @param {number} x - Left position in CSS pixels.
+   * @param {number} y - Top position in CSS pixels.
    * @param {number} maxVisible - Max lines to render.
    * @returns {void}
    */
   function drawRightMono(g, lines, x, y, maxVisible) {
-    g.fillStyle = PALETTE.output;
+    g.fillStyle = PALETTE.output; // vibe-driven mono
     const tail = lines.slice(-maxVisible);
     for (let i = 0; i < tail.length; i++) g.fillText(tail[i], x, y + i * lineH);
   }
 
   /**
    * Map the global speed multiplier into per-loop intervals.
-   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @param {number} mult - Global speed multiplier (~0.4–1.6).
    * @returns {void}
    */
   function applySpeed(mult) {
@@ -272,34 +284,57 @@ export const coding = (() => {
     typeSpeedMs = Math.max(12, Math.round(typeSpeedMsBase / m));
   }
 
-  // ---------- sizing/typography (match mining.js behavior) ----------
+  // ---------- sizing/typography ----------
   /**
    * Sync canvas transform and typography to CSS pixels & modular scale.
-   * (Matches mining.js approach so fonts look uniform and stable on resize/rotate.)
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dpr?:number}} ctx - Render context providing the 2D canvas, size, and device-pixel ratio used to compute the DPR transform and font metrics.
-   * @returns {void} Updates the canvas transform, font size, and line height so drawing occurs in CSS pixels.
+   * @param {RenderCtx} ctx - Render context to read DPR and set font metrics.
+   * @returns {void}
    */
   function syncTypography(ctx) {
     const g = ctx.ctx2d;
     const dpr = ctx.dpr || window.devicePixelRatio || 1;
-
-    // Draw in CSS pixels: scale device pixels down by DPR.
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Use modular(0) like mining; keep a sane floor for tiny screens.
     fontPx = Math.max(12, Math.round(modular(0)));
     g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     g.textBaseline = 'top';
-
-    // Slightly tighter than 1.25 for coding; mining uses ~1.15
     lineH = Math.max(12, Math.round(fontPx * 1.15));
+  }
+
+  // paint backgrounds:
+  // - fill entire canvas LEFT_BG (solid black)
+  // - then paint RIGHT PANE with the vibe bg color
+  /**
+   * Paint the two-tone background (left fixed black, right vibe).
+   * @param {RenderCtx} ctx - Render context providing size and 2D context.
+   * @returns {void}
+   */
+  function paintBG(ctx) {
+    const g = ctx.ctx2d;
+    const dpr = ctx.dpr || window.devicePixelRatio || 1;
+    const W = Math.max(1, Math.round(ctx.w / dpr));
+    const H = Math.max(1, Math.round(ctx.h / dpr));
+    const rightX = codeWidthPx; // divider drawn after
+
+    g.save();
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+
+    // Left (and default) = black
+    g.fillStyle = LEFT_BG;
+    g.fillRect(0, 0, W, H);
+
+    // Right pane follows vibe
+    g.fillStyle = PALETTE.rightBg;
+    g.fillRect(rightX, 0, W - rightX, H);
+
+    g.restore();
   }
 
   // ---------- lifecycle ----------
   /**
-   * Initialize mode (fonts, palette, buffers, listeners).
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,dpr?:number}} ctx - Render context used to configure drawing and metrics.
-   * @returns {void} Prepares internal state, seeds the right pane, and attaches theme/vibe listeners.
+   * Initialize fonts, palette, buffers, listeners, and first paint.
+   * @param {RenderCtx} ctx - Render context used for sizing and drawing.
+   * @returns {void}
    */
   function init(ctx) {
     PALETTE = readPalette();
@@ -315,10 +350,10 @@ export const coding = (() => {
     accCaretS = 0;
     caretOn = true;
 
-    // seed right pane so it isn’t blank
+    // seed right pane
     for (let i = 0; i < 3; i++) pushCapped(outLines, pick(OUTPUT_SNIPPETS), MAX_OUT_LINES);
 
-    // listen for vibe/theme changes and refresh palette live
+    // listen for vibe/theme changes → refresh palette
     const bus = window.app && window.app.events;
     if (bus && typeof bus.on === 'function') {
       __onTheme = () => {
@@ -331,12 +366,14 @@ export const coding = (() => {
       bus.on('vibe', __onVibe);
     }
 
+    // compute layout before first background paint
     resize(ctx);
+    paintBG(ctx);
   }
 
   /**
-   * Handle canvas resizes (mirror mining.js: recompute metrics in CSS px).
-   * @param {{w:number,h:number,dpr?:number,ctx2d:CanvasRenderingContext2D}} ctx - Render context.
+   * Handle resizes/DPR changes and recompute layout/visibility.
+   * @param {RenderCtx} ctx - Updated render context.
    * @returns {void}
    */
   function resize(ctx) {
@@ -347,14 +384,14 @@ export const coding = (() => {
     const W = Math.max(1, Math.round(ctx.w / dpr));
     const H = Math.max(1, Math.round(ctx.h / dpr));
 
-    codeWidthPx = Math.floor(W * 0.7) | 0;
+    codeWidthPx = Math.floor(W * 0.7) | 0; // 70% code, 30% output
     codeLinesVisible = Math.max(4, Math.floor(H / lineH));
     outLinesVisible = codeLinesVisible;
   }
 
   /**
-   * Clear canvas and internal buffers.
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number}} ctx - Render context.
+   * Clear canvas and buffers, then repaint backgrounds to current vibe.
+   * @param {RenderCtx} ctx - Render context whose canvas is cleared.
    * @returns {void}
    */
   function clear(ctx) {
@@ -367,17 +404,22 @@ export const coding = (() => {
     accCodeMs = accOutMs = accTypeMs = 0;
     accCaretS = 0;
     caretOn = true;
+
+    PALETTE = readPalette();
+    paintBG(ctx);
   }
 
   /**
-   * Start hook (no-op to mirror other modes).
-   * @returns {void} No value; lifecycle stub for parity with other modes.
+   * Start hook (no-op; present for API parity).
+   * @returns {void}
    */
   function start() {}
 
-  /** @returns {void} */
+  /**
+   * Stop hook; detaches theme/vibe listeners.
+   * @returns {void}
+   */
   function stop() {
-    // detach vibe/theme listeners we added in init()
     const bus = window.app && window.app.events;
     if (bus && typeof bus.off === 'function') {
       if (__onTheme) bus.off('theme', __onTheme);
@@ -388,18 +430,19 @@ export const coding = (() => {
   }
 
   /**
-   * Per-frame update & draw.
-   * @param {{ctx2d:CanvasRenderingContext2D,w:number,h:number,elapsed:number,dt:number,speed:number}} ctx - Render context.
+   * Per-frame update and draw of code (left) and output (right) panes.
+   * @param {RenderCtx} ctx - Render context (elapsed/dt/speed provided by host).
    * @returns {void}
    */
   function frame(ctx) {
     const g = ctx.ctx2d;
 
+    // Always read the latest palette (ensures live vibe swap)
+    PALETTE = readPalette();
+
     // Keep timing in sync with the global speed model
     applySpeed(ctx.speed);
 
-    // IMPORTANT: do not fall back to non-zero when paused.
-    // main.js sets these to 0 when ctx.paused === true.
     const dtMs = ctx.elapsed; // 0 while paused
     const dtS = ctx.dt; // 0 while paused
 
@@ -412,7 +455,7 @@ export const coding = (() => {
 
     // --- LEFT PANE typing loop ---
     if (!partialLine) {
-      accCodeMs += dtMs; // cooldown before starting a line
+      accCodeMs += dtMs;
       if (accCodeMs >= codeIntervalMs) {
         accCodeMs = 0;
         partialLine =
@@ -425,7 +468,6 @@ export const coding = (() => {
         accTypeMs -= typeSpeedMs;
         partialIdx++;
         if (partialIdx >= partialLine.length) {
-          // Line finished — commit to buffer and clear partial
           pushCapped(codeLines, partialLine, MAX_CODE_LINES);
           partialLine = null;
           partialIdx = 0;
@@ -434,54 +476,54 @@ export const coding = (() => {
       }
     }
 
-    // Caret blink (also halted while paused since dtS === 0)
+    // Caret blink
     accCaretS += dtS;
     if (accCaretS >= CARET_PERIOD_S) {
       accCaretS -= CARET_PERIOD_S;
       caretOn = !caretOn;
     }
 
-    // ---- DRAW (CSS pixels thanks to setTransform) ----
-    g.clearRect(0, 0, ctx.w, ctx.h);
+    // ---- DRAW ----
+    // 1) two-tone background (left black, right vibe)
+    paintBG(ctx);
 
-    // LEFT PANE: keep the last row free for the active typed line
+    // 2) Left pane code
     const fullTailAll = codeLines.slice(-codeLinesVisible);
     const mustReserveRowForPartial = !!partialLine && fullTailAll.length >= codeLinesVisible;
     const fullTail = mustReserveRowForPartial ? fullTailAll.slice(1) : fullTailAll;
 
-    // draw full committed lines
     for (let i = 0; i < fullTail.length; i++) {
       drawHighlightedLine(g, fullTail[i], 8, 8 + i * lineH);
     }
 
-    // caret metrics (bottom-aligned)
+    // caret metrics
     const caretH = Math.max(2, Math.floor(lineH * 0.12));
 
-    // draw the active partial line at the next row (reserved if needed)
     if (partialLine) {
       const row = Math.min(codeLinesVisible - 1, fullTail.length);
-      const yTop = 8 + row * lineH; // textBaseline='top'
-      const yBot = yTop + lineH - caretH; // caret sits at bottom of line box
+      const yTop = 8 + row * lineH;
+      const yBot = yTop + lineH - caretH;
       const typed = partialLine.slice(0, partialIdx);
       drawHighlightedLine(g, typed, 8, yTop);
 
       if (caretOn) {
         const caretX = 8 + g.measureText(typed).width;
+        g.fillStyle = PALETTE.ident;
         g.fillRect(caretX, yBot, 8, caretH);
       }
     } else if (caretOn) {
-      // idle caret at the next new line after the fullTail block
       const row = Math.min(codeLinesVisible - 1, fullTail.length);
       const yTop = 8 + row * lineH;
       const yBot = yTop + lineH - caretH;
+      g.fillStyle = PALETTE.ident;
       g.fillRect(8, yBot, 8, caretH);
     }
 
-    // Divider
+    // 3) Divider
     g.fillStyle = PALETTE.divider;
     g.fillRect(codeWidthPx, 0, 2, ctx.h);
 
-    // Right pane — mono, vibe-colored
+    // 4) Right pane — mono, vibe-colored
     drawRightMono(g, outLines, codeWidthPx + 12, 8, outLinesVisible);
   }
 

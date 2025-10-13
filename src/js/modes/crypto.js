@@ -28,9 +28,11 @@ export const crypto = (() => {
   const spinner = ['|', '/', '-', '\\'];
   let spinIdx = 0;
 
-  // Theming helper
+  // CSS theme helpers
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
+  const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
+  const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   /**
    * Return a hex string of length 2*n.
@@ -112,6 +114,14 @@ export const crypto = (() => {
     buffer = [];
     maxLines = rows * 5;
     emitAccumulator = 0;
+
+    // Fill the base to the vibe background (opaque)
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+    g.save();
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
   }
 
   /**
@@ -133,13 +143,21 @@ export const crypto = (() => {
   }
 
   /**
-   * Clear buffer and canvas.
+   * Clear buffer and canvas to the current vibe background.
    * @param {*} ctx - Render context with {ctx2d, w, h}.
    * @returns {void}
    */
   function clear(ctx) {
     buffer = [];
-    ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+    g.save();
+    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+    g.globalAlpha = 1;
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
   }
 
   // --- speed mapping (Crypto) ---
@@ -168,14 +186,13 @@ export const crypto = (() => {
     // Apply global → per-mode speed mapping for cadence
     applySpeed(ctx.speed);
 
-    // Soft trail fade, respecting themed bg when provided
-    const bg = readVar('--bg', '#000') || '#000';
-    g.fillStyle = 'rgba(0,0,0,0.18)';
-    if (bg !== '#000') {
-      // gentle blend toward theme background
-      g.fillStyle = bg + 'E6'; // hex+alpha; ignored if non-hex
-    }
+    // Soft trail fade, using the vibe background with a small global alpha.
+    // Works for #RRGGBB and #RRGGBBAA colors without string hacking.
+    g.save();
+    g.globalAlpha = 0.18; // trail strength
+    g.fillStyle = getBG();
     g.fillRect(0, 0, W, H);
+    g.restore();
 
     // Emission timing (paused-aware)
     if (running && !ctx.paused) {
@@ -191,8 +208,7 @@ export const crypto = (() => {
 
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
     g.textBaseline = 'top';
-    const fg = readVar('--fg', '#03ffaf');
-    g.fillStyle = (fg || '#03ffaf').trim();
+    g.fillStyle = getFG();
 
     let y = 4;
     const xPad = 8;

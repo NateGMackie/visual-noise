@@ -4,6 +4,24 @@
 import { randInt, choice } from '../lib/index.js';
 
 /**
+ * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
+ * @typedef {*} CanvasRenderingContext2D
+ */
+/**
+ * Render context passed to mode functions each frame.
+ * @typedef {object} VNRenderContext
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
+ * @property {number} w - Canvas width in CSS pixels.
+ * @property {number} h - Canvas height in CSS pixels.
+ * @property {number} dpr - Device pixel ratio used for transforms.
+ * @property {number} elapsed - Milliseconds since the last frame.
+ * @property {number} dt - Seconds since the last frame.
+ * @property {boolean} paused - Whether the animation is paused.
+ * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ */
+
+/**
  * Program: Mining
  * Genre: Developer
  * Style: Mining (operator prompt + stream)
@@ -16,13 +34,13 @@ import { randInt, choice } from '../lib/index.js';
  * Exports:
  *   - init(ctx), resize(ctx), start(), stop(), frame(ctx), clear(ctx)
  */
-
 export const mining = (() => {
   // ——— Internal state ———
   let fontSize = 16,
     lineH = 18,
     cols = 80,
     rows = 40;
+  /** @type {string[]} */
   let buffer = []; // ring buffer of recent lines
   let maxLines = 200;
   let running = false;
@@ -34,6 +52,7 @@ export const mining = (() => {
 
   // typing a background "generated" line
   let typingChance = 0.16; // sometimes background lines are typed
+  /** @type {string|null} */
   let partialLine = null;
   let partialIdx = 0;
   let typeAccumulator = 0;
@@ -56,8 +75,18 @@ export const mining = (() => {
   const promptChancePerEmit = 0.38; // chance to start a prompt at an emit tick
 
   // ——— Helpers ———
+
+  /**
+   * Read a CSS variable from :root with a fallback.
+   * @param {string} name - CSS variable name (e.g., "--fg").
+   * @param {string} fallback - Value to use if variable is empty/unset.
+   * @returns {string} Resolved CSS value.
+   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
+
+  /** @returns {string} Current vibe foreground color for text. */
+  const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   /**
    * Random float in the half-open interval [min, max).
@@ -78,6 +107,7 @@ export const mining = (() => {
     return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
+  /** @returns {string} HH:MM:SS timestamp. */
   const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
   /**
@@ -101,7 +131,8 @@ export const mining = (() => {
    */
   function makeProgBar(pct) {
     const width = 20;
-    const filled = Math.round((pct / 100) * width);
+    const p = Math.max(0, Math.min(100, pct));
+    const filled = Math.round((p / 100) * width);
     return barFill.repeat(filled) + barEmpty.repeat(width - filled);
   }
 
@@ -211,20 +242,32 @@ export const mining = (() => {
     }
   }
 
-  // ——— Mode API ———
+  // ——— internal helpers ———
 
   /**
-   * Initialize metrics, buffers, and baseline drawing state.
-   * @param {*} ctx - Render context ({ canvas, ctx2d, dpr, w, h }).
+   * Reset 2D canvas defaults and apply DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {number} dpr - Device pixel ratio used for transforms.
    * @returns {void}
    */
-  function init(ctx) {
-    const g = ctx.ctx2d;
-    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+  function reset2D(g, dpr) {
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
     g.shadowBlur = 0;
     g.shadowColor = 'rgba(0,0,0,0)';
+  }
+
+  // ——— Mode API ———
+
+  /**
+   * Initialize metrics, buffers, and baseline drawing state.
+   * @param {VNRenderContext} ctx - Render context ({ canvas, ctx2d, dpr, w, h }).
+   * @returns {void}
+   */
+  function init(ctx) {
+    const g = ctx.ctx2d;
+    reset2D(g, ctx.dpr);
 
     fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
     lineH = Math.floor(fontSize * 1.15);
@@ -250,7 +293,7 @@ export const mining = (() => {
 
   /**
    * Recompute metrics on resize/orientation.
-   * @param {*} ctx - Render context to reinitialize with current dimensions.
+   * @param {VNRenderContext} ctx - Render context to reinitialize with current dimensions.
    * @returns {void}
    */
   function resize(ctx) {
@@ -259,7 +302,7 @@ export const mining = (() => {
 
   /**
    * Clear the canvas and the ring buffer.
-   * @param {*} ctx - Render context that owns the canvas to clear.
+   * @param {VNRenderContext} ctx - Render context that owns the canvas to clear.
    * @returns {void}
    */
   function clear(ctx) {
@@ -297,7 +340,10 @@ export const mining = (() => {
   }
 
   // --- prompt helpers ---
-  /** Start typing a new command at the prompt. */
+  /**
+   * Start typing a new command at the prompt.
+   * @returns {void}
+   */
   function beginPrompt() {
     promptActive = true;
     promptLine = makeCommand();
@@ -334,7 +380,7 @@ export const mining = (() => {
   // --- frame/draw ---
   /**
    * Render one frame with operator prompt + stream.
-   * @param {*} ctx - { ctx2d, w, h, dpr, elapsed, paused, speed }
+   * @param {VNRenderContext} ctx - { ctx2d, w, h, dpr, elapsed, paused, speed }.
    * @returns {void}
    */
   function frame(ctx) {
@@ -345,7 +391,7 @@ export const mining = (() => {
     // per-mode speed mapping
     applySpeed(ctx.speed);
 
-    // soft fade background
+    // soft fade background (keep black; text color comes from vibe)
     g.fillStyle = 'rgba(0,0,0,0.18)';
     g.fillRect(0, 0, W, H);
 
@@ -405,7 +451,7 @@ export const mining = (() => {
 
     // draw buffer
     const lines = buffer.slice(Math.max(0, buffer.length - rows));
-    const fg = (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
+    const fg = getFG();
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     g.textBaseline = 'top';
     g.fillStyle = fg;
@@ -426,8 +472,6 @@ export const mining = (() => {
       const promptText = `${PROMPT_PREFIX}${typed}${cursorOn ? '▍' : ' '}`;
       g.fillText(promptText, xPad, y);
     } else {
-      // idle prompt every so often (optional): show a waiting cursor
-      // feel free to comment this block if you prefer a clean bottom line.
       const idleText = `${PROMPT_PREFIX}${cursorOn ? '▍' : ' '}`;
       g.fillText(idleText, xPad, y);
     }

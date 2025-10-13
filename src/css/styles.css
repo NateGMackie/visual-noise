@@ -14,6 +14,10 @@
   --log-error: #ff9e9e;
   --log-pass: #b8ffb8;
   --log-fail: #ffb0b0;
+
+  /* Per-vibe scanline defaults (your JS themes override these) */
+  --scanline-dark: #001003; /* subtle dark stripe for classic vibe */
+  --scanline-light: #002016; /* subtle light stripe for classic vibe */
 }
 
 html,
@@ -409,26 +413,39 @@ body.has-controls-visible .pos-bottom-right {
   }
 }
 
-/* ===== CRT scanlines overlay (visible on pure black) ===== */
+/* ===== CRT scanlines overlay (per-vibe tint via CSS variables) ===== */
+/* Apply .scanlines to <body> or #stage to enable */
+.scanlines::before,
 .scanlines::after {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
+  z-index: 1500; /* above canvas, below footer/toasts */
+}
 
-  /* Heavier, always-visible lines (no blend dependency) */
+/* Dark stripes layer: slight darkening between rows */
+.scanlines::before {
   background: repeating-linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.22) 0px,
-    /* line tint */ rgba(255, 255, 255, 0.22) 1px,
-    /* 1px line */ transparent 1px,
-    transparent 3px /* 2px gap => 3px cycle */
+    var(--scanline-dark) 0px,
+    var(--scanline-dark) 1px,
+    transparent 1px,
+    transparent 3px
   );
+  opacity: 0.16; /* global strength for dark lines */
+  mix-blend-mode: multiply; /* deepens underlying pixels */
+}
 
-  /* Keep it obvious but not overwhelming */
-  opacity: 0.18;
-  mix-blend-mode: screen; /* remove blend—was disappearing on #000 */
-
-  /* Above canvas (z:0), below footer (z:2000) and toasts */
-  z-index: 1500;
+/* Light stripes layer: faint highlight for “phosphor” feel */
+.scanlines::after {
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--scanline-light) 0px,
+    var(--scanline-light) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.08; /* global strength for light lines */
+  mix-blend-mode: screen; /* lifts highlights without washing out */
 }
