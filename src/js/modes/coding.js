@@ -55,6 +55,9 @@ export const coding = (() => {
   const MAX_CODE_LINES = 600;
   const MAX_OUT_LINES = 300;
 
+  // Fixed left-pane background
+  const LEFT_BG = '#000000';
+
   // ---------- vibe-aware palette (robust fallbacks) ----------
   function cssVar(name, fallback) {
     const v = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -72,7 +75,6 @@ export const coding = (() => {
     };
     const outputMono =
       cssVar('--output-fg', varOr('--fg', '--accent', '--primary')) || bodyColor || '#ffffff';
-    const bg = cssVar('--bg', '#000000');
 
     return {
       // Left syntax colors
@@ -85,7 +87,7 @@ export const coding = (() => {
       // Layout + right side mono color (vibe-driven)
       divider: cssVar('--pane-divider', '#3a3a3a'),
       output: outputMono,
-      bg,
+      rightBg: cssVar('--bg', '#000000'), // right pane follows vibe
     };
   }
   let PALETTE = null;
@@ -231,17 +233,28 @@ export const coding = (() => {
     lineH = Math.max(12, Math.round(fontPx * 1.15));
   }
 
-  // paint vibe background (solid)
+  // paint backgrounds:
+  // - fill entire canvas LEFT_BG (solid black)
+  // - then paint RIGHT PANE with the vibe bg color
   function paintBG(ctx) {
     const g = ctx.ctx2d;
     const dpr = ctx.dpr || window.devicePixelRatio || 1;
     const W = Math.max(1, Math.round(ctx.w / dpr));
     const H = Math.max(1, Math.round(ctx.h / dpr));
+    const rightX = codeWidthPx; // divider drawn after
+
     g.save();
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
-    g.fillStyle = PALETTE.bg;
+
+    // Left (and default) = black
+    g.fillStyle = LEFT_BG;
     g.fillRect(0, 0, W, H);
+
+    // Right pane follows vibe
+    g.fillStyle = PALETTE.rightBg;
+    g.fillRect(rightX, 0, W - rightX, H);
+
     g.restore();
   }
 
@@ -276,8 +289,8 @@ export const coding = (() => {
       bus.on('vibe', __onVibe);
     }
 
+    // compute layout before first background paint
     resize(ctx);
-    // ensure we immediately show the current vibe background
     paintBG(ctx);
   }
 
@@ -289,7 +302,7 @@ export const coding = (() => {
     const W = Math.max(1, Math.round(ctx.w / dpr));
     const H = Math.max(1, Math.round(ctx.h / dpr));
 
-    codeWidthPx = Math.floor(W * 0.7) | 0;
+    codeWidthPx = Math.floor(W * 0.7) | 0; // 70% code, 30% output
     codeLinesVisible = Math.max(4, Math.floor(H / lineH));
     outLinesVisible = codeLinesVisible;
   }
@@ -305,7 +318,6 @@ export const coding = (() => {
     accCaretS = 0;
     caretOn = true;
 
-    // repaint to current vibe background so right pane reflects vibe immediately
     PALETTE = readPalette();
     paintBG(ctx);
   }
@@ -325,15 +337,14 @@ export const coding = (() => {
   function frame(ctx) {
     const g = ctx.ctx2d;
 
-    // Always read the latest palette (cheap + ensures live vibe swap)
+    // Always read the latest palette (ensures live vibe swap)
     PALETTE = readPalette();
 
     // Keep timing in sync with the global speed model
     applySpeed(ctx.speed);
 
-    // IMPORTANT: dt values are 0 while paused (main sets them)
-    const dtMs = ctx.elapsed;
-    const dtS = ctx.dt;
+    const dtMs = ctx.elapsed; // 0 while paused
+    const dtS = ctx.dt;       // 0 while paused
 
     // --- RIGHT PANE cadence ---
     accOutMs += dtMs;
@@ -373,24 +384,21 @@ export const coding = (() => {
     }
 
     // ---- DRAW ----
-    // 1) repaint vibe background (solid)
+    // 1) two-tone background (left black, right vibe)
     paintBG(ctx);
 
-    // 2) Now draw content on top (we redraw fully each frame)
-    // LEFT PANE: keep the last row free for the active typed line
+    // 2) Left pane code
     const fullTailAll = codeLines.slice(-codeLinesVisible);
     const mustReserveRowForPartial = !!partialLine && fullTailAll.length >= codeLinesVisible;
     const fullTail = mustReserveRowForPartial ? fullTailAll.slice(1) : fullTailAll;
 
-    // draw full committed lines
     for (let i = 0; i < fullTail.length; i++) {
       drawHighlightedLine(g, fullTail[i], 8, 8 + i * lineH);
     }
 
-    // caret metrics (bottom-aligned)
+    // caret metrics
     const caretH = Math.max(2, Math.floor(lineH * 0.12));
 
-    // draw the active partial line at the next row (reserved if needed)
     if (partialLine) {
       const row = Math.min(codeLinesVisible - 1, fullTail.length);
       const yTop = 8 + row * lineH;
@@ -411,11 +419,11 @@ export const coding = (() => {
       g.fillRect(8, yBot, 8, caretH);
     }
 
-    // Divider
+    // 3) Divider
     g.fillStyle = PALETTE.divider;
     g.fillRect(codeWidthPx, 0, 2, ctx.h);
 
-    // Right pane — mono, vibe-colored
+    // 4) Right pane — mono, vibe-colored
     drawRightMono(g, outLines, codeWidthPx + 12, 8, outLinesVisible);
   }
 
