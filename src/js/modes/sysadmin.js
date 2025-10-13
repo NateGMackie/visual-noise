@@ -4,6 +4,23 @@
 import { randInt } from '../lib/index.js';
 
 /**
+ * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
+ * @typedef {*} CanvasRenderingContext2D
+ */
+/**
+ * Render context passed to mode functions each frame.
+ * @typedef {object} VNRenderContext
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
+ * @property {number} w - Canvas width in CSS pixels.
+ * @property {number} h - Canvas height in CSS pixels.
+ * @property {number} dpr - Device pixel ratio used for transforms.
+ * @property {number} elapsed - Milliseconds since the last frame.
+ * @property {boolean} paused - Whether the animation is paused.
+ * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ */
+
+/**
  * Sysadmin console: emits status lines (CPU/MEM/NET/DISK) with vibe-aware trail.
  * Exports standard mode API: init, resize, start, stop, frame, clear.
  */
@@ -23,28 +40,53 @@ export const sysadmin = (() => {
   let emitIntervalMs = 140;
 
   // ------- theming -------
+  /**
+   * Read a CSS variable from :root with a fallback.
+   * @param {string} name - CSS variable name (e.g., "--fg").
+   * @param {string} fallback - Value to use if variable is empty/unset.
+   * @returns {string} Resolved CSS value.
+   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
+
+  /** @returns {string} Current vibe background color. */
   const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
+  /** @returns {string} Current vibe foreground color. */
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   // ------- line generators -------
   const barFill = '█';
   const barEmpty = '·';
 
+  /**
+   * Build a fixed-width ASCII bar for percentages.
+   * @param {number} pct - Percentage in the range 0..100.
+   * @param {number} [width] - Bar character width.
+   * @returns {string} A bar visualization like "█████···········".
+   */
   const makeBar = (pct, width = 20) => {
     const p = Math.max(0, Math.min(100, pct));
     const filled = Math.round((p / 100) * width);
     return barFill.repeat(filled) + barEmpty.repeat(width - filled);
   };
 
+  /** @returns {string} HH:MM:SS timestamp. */
   const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
+  /**
+   * Push a line into the ring buffer, trimming when over capacity.
+   * @param {string} l - Line to append.
+   * @returns {void}
+   */
   const push = (l) => {
     buffer.push(l);
     if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
   };
 
+  /**
+   * Compose one sysadmin-flavored line (CPU/MEM/DISK/NET or LOG).
+   * @returns {string} A formatted log/status line.
+   */
   function makeLine() {
     const r = Math.random();
     if (r < 0.2) {
@@ -84,6 +126,12 @@ export const sysadmin = (() => {
   }
 
   // ------- internal helpers -------
+  /**
+   * Reset 2D canvas defaults and apply DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {number} dpr - Device pixel ratio used for transforms.
+   * @returns {void}
+   */
   function reset2D(g, dpr) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.globalAlpha = 1;
@@ -92,6 +140,11 @@ export const sysadmin = (() => {
     g.shadowColor = 'rgba(0,0,0,0)';
   }
 
+  /**
+   * Paint the full canvas to the current vibe background color.
+   * @param {VNRenderContext} ctx - Render context.
+   * @returns {void}
+   */
   function paintBG(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
@@ -105,6 +158,11 @@ export const sysadmin = (() => {
   }
 
   // ------- lifecycle -------
+  /**
+   * Initialize measurements, buffers, and baseline drawing state.
+   * @param {VNRenderContext} ctx - Render context ({ canvas, ctx2d, dpr, w, h, ... }).
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     reset2D(g, ctx.dpr);
@@ -121,18 +179,36 @@ export const sysadmin = (() => {
     paintBG(ctx); // initial paint to vibe background
   }
 
+  /**
+   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
+   * @param {VNRenderContext} ctx - Render context.
+   * @returns {void}
+   */
   function resize(ctx) {
     init(ctx);
   }
 
+  /**
+   * Start emitting lines.
+   * @returns {void}
+   */
   function start() {
     running = true;
   }
 
+  /**
+   * Stop emitting lines.
+   * @returns {void}
+   */
   function stop() {
     running = false;
   }
 
+  /**
+   * Clear the canvas and line buffer, repainting to the vibe background.
+   * @param {VNRenderContext} ctx - Render context.
+   * @returns {void}
+   */
   function clear(ctx) {
     buffer = [];
     reset2D(ctx.ctx2d, ctx.dpr);
@@ -140,13 +216,25 @@ export const sysadmin = (() => {
   }
 
   // ------- speed mapping -------
+  /**
+   * Update the line-emission cadence from the global speed multiplier.
+   * Keeps ~140ms between lines at 1.0×; higher multiplier emits faster.
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
-    const midEmit = 140;
+    const midEmit = 140; // 140ms between lines @ 1.0×
     emitIntervalMs = Math.max(20, Math.round(midEmit / m));
   }
 
   // ------- frame -------
+  /**
+   * Render one frame and, if running, emit lines on cadence.
+   * Trail fades toward the vibe background instead of fixed black.
+   * @param {VNRenderContext} ctx - Render context for this frame.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
@@ -155,7 +243,7 @@ export const sysadmin = (() => {
     reset2D(g, ctx.dpr);
     applySpeed(ctx.speed);
 
-    // Trail fade toward current vibe background (instead of fixed black)
+    // Trail fade toward current vibe background
     const BASE_FADE = 0.18;
     const fadeAlpha = Math.max(0.05, Math.min(0.25, BASE_FADE));
     g.save();

@@ -1,7 +1,6 @@
 // src/js/themes.js
 import { cfg } from './state.js';
 
-
 const THEMES = {
   classic: {
     '--bg': '#020800ff',
@@ -47,8 +46,8 @@ const THEMES = {
   },
   // NEW: Game Boy (DMG-01) vibe
   gameboy: {
-    '--bg': '#9bbc0f',     // pea-green screen base
-    '--fg': '#0f380f',     // dark pixel green/black
+    '--bg': '#9bbc0f', // pea-green screen base
+    '--fg': '#0f380f', // dark pixel green/black
     '--accent': '#8bac0f', // lighter highlight green
     '--scanline-dark': '#0a2a0a', // subtle deep green stripe
     '--scanline-light': '#b9d64d', // faint light green stripe

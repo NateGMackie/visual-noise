@@ -246,30 +246,29 @@ function run(t) {
   }
 
   /**
- * Apply a vibe (theme) and update the HUD label,
- * then force the active mode to repaint to the new background.
- * @param {string} v - Vibe key to apply (e.g., 'classic', 'gameboy').
- */
-function handleVibe(v) {
-  // Apply CSS vars
-  applyTheme(v);
+   * Apply a vibe (theme) and update the HUD label,
+   * then force the active mode to repaint to the new background.
+   * @param {string} v - Vibe key to apply (e.g., 'classic', 'gameboy').
+   */
+  function handleVibe(v) {
+    // Apply CSS vars
+    applyTheme(v);
 
-  // Update HUD
-  const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
-  if (vibeEl) {
-    vibeEl.textContent = v;
-    vibeEl.dataset.vibe = v;
+    // Update HUD
+    const vibeEl = document.getElementById('vibeName') || document.getElementById('themeName');
+    if (vibeEl) {
+      vibeEl.textContent = v;
+      vibeEl.dataset.vibe = v;
+    }
+
+    // IMPORTANT: repaint to the new bg immediately so stale opaque pixels don't linger.
+    // Prefer the mode's own clear() (it paints to --bg); otherwise request a hard clear.
+    if (activeModule?.clear) {
+      activeModule.clear(ctx);
+    } else {
+      ctx.needsFullClear = true;
+    }
   }
-
-  // IMPORTANT: repaint to the new bg immediately so stale opaque pixels don't linger.
-  // Prefer the mode's own clear() (it paints to --bg); otherwise request a hard clear.
-  if (activeModule?.clear) {
-    activeModule.clear(ctx);
-  } else {
-    ctx.needsFullClear = true;
-  }
-}
-
 
   // Legacy names
   on('mode', (name) => {

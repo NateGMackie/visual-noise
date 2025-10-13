@@ -4,6 +4,24 @@
 import { randInt, choice } from '../lib/index.js';
 
 /**
+ * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
+ * @typedef {*} CanvasRenderingContext2D
+ */
+/**
+ * Render context passed to mode functions each frame.
+ * @typedef {object} VNRenderContext
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
+ * @property {number} w - Canvas width in CSS pixels.
+ * @property {number} h - Canvas height in CSS pixels.
+ * @property {number} dpr - Device pixel ratio used for transforms.
+ * @property {number} elapsed - Milliseconds since the last frame.
+ * @property {number} dt - Seconds since the last frame.
+ * @property {boolean} paused - Whether the animation is paused.
+ * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ */
+
+/**
  * Program: Mining
  * Genre: Developer
  * Style: Mining (operator prompt + stream)
@@ -16,10 +34,13 @@ import { randInt, choice } from '../lib/index.js';
  * Exports:
  *   - init(ctx), resize(ctx), start(), stop(), frame(ctx), clear(ctx)
  */
-
 export const mining = (() => {
   // ——— Internal state ———
-  let fontSize = 16, lineH = 18, cols = 80, rows = 40;
+  let fontSize = 16,
+    lineH = 18,
+    cols = 80,
+    rows = 40;
+  /** @type {string[]} */
   let buffer = []; // ring buffer of recent lines
   let maxLines = 200;
   let running = false;
@@ -27,10 +48,11 @@ export const mining = (() => {
   // cadence (affected by speed)
   let emitAccumulator = 0; // for full-line emission cadence
   let emitIntervalMs = 150; // ~150ms/line @ 1.0×
-  let typeSpeedMs = 26;     // ~26ms/char @ 1.0×
+  let typeSpeedMs = 26; // ~26ms/char @ 1.0×
 
   // typing a background "generated" line
   let typingChance = 0.16; // sometimes background lines are typed
+  /** @type {string|null} */
   let partialLine = null;
   let partialIdx = 0;
   let typeAccumulator = 0;
@@ -38,10 +60,10 @@ export const mining = (() => {
   // ——— Operator prompt (user command) ———
   const PROMPT_PREFIX = '$ ';
   let promptActive = false; // currently typing a command
-  let promptLine = '';      // full command to type
-  let promptIdx = 0;        // typed chars of promptLine so far
-  let promptAccumulator = 0;// ms since last typed char for prompt
-  let cursorBlinkMs = 0;    // for blinking cursor on the prompt
+  let promptLine = ''; // full command to type
+  let promptIdx = 0; // typed chars of promptLine so far
+  let promptAccumulator = 0; // ms since last typed char for prompt
+  let cursorBlinkMs = 0; // for blinking cursor on the prompt
   const CURSOR_PERIOD = 1000; // ms; ~520ms on, rest off looks nice
 
   // After a command finishes, emit a short response burst
@@ -52,23 +74,47 @@ export const mining = (() => {
   let promptCooldownAcc = 0;
   const promptChancePerEmit = 0.38; // chance to start a prompt at an emit tick
 
-  // ——— Theme helpers (live reads so vibe swaps apply instantly) ———
+  // ——— Helpers ———
+
+  /**
+   * Read a CSS variable from :root with a fallback.
+   * @param {string} name - CSS variable name (e.g., "--fg").
+   * @param {string} fallback - Value to use if variable is empty/unset.
+   * @returns {string} Resolved CSS value.
+   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
-  const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();   // supports #RRGGBB / #RRGGBBAA
+
+  /** @returns {string} Current vibe foreground color for text. */
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
-  // ——— Helpers ———
+  /**
+   * Random float in the half-open interval [min, max).
+   * @param {number} min - Lower bound (inclusive).
+   * @param {number} max - Upper bound (exclusive).
+   * @returns {number} A random float in [min, max).
+   */
   const randFloat = (min, max) => min + Math.random() * (max - min);
 
+  /**
+   * Random hex string of length 2*n (n bytes), lowercase.
+   * @param {number} n - Number of random bytes to generate.
+   * @returns {string} Hex string (2*n chars), e.g. "0fa3…".
+   */
   function randHex(n) {
     const bytes = new Uint8Array(n);
     globalThis.crypto.getRandomValues(bytes);
     return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
+  /** @returns {string} HH:MM:SS timestamp. */
   const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
+  /**
+   * Push a line into the ring buffer, trimming when over capacity.
+   * @param {string} line - The line to append to the buffer.
+   * @returns {void}
+   */
   function push(line) {
     buffer.push(line);
     if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
@@ -78,6 +124,11 @@ export const mining = (() => {
   const barFill = '█';
   const barEmpty = '·';
 
+  /**
+   * Build a fixed-width progress bar using block/dot characters.
+   * @param {number} pct - Percentage value in the range 0..100.
+   * @returns {string} A bar of width 20, e.g. "█████···········".
+   */
   function makeProgBar(pct) {
     const width = 20;
     const p = Math.max(0, Math.min(100, pct));
@@ -86,13 +137,50 @@ export const mining = (() => {
   }
 
   const cryptoCmds = [
-    'HANDSHAKE','DERIVE-KEY','EXPAND-KEY','ENCRYPT','DECRYPT','ROTATE-KEYS','SEAL','UNSEAL',
-    'ATTEST','HKDF','PBKDF2','SCRYPT','ARGON2','SHA256','SHA512','BLAKE3','KECCAK','SIGN','VERIFY',
+    'HANDSHAKE',
+    'DERIVE-KEY',
+    'EXPAND-KEY',
+    'ENCRYPT',
+    'DECRYPT',
+    'ROTATE-KEYS',
+    'SEAL',
+    'UNSEAL',
+    'ATTEST',
+    'HKDF',
+    'PBKDF2',
+    'SCRYPT',
+    'ARGON2',
+    'SHA256',
+    'SHA512',
+    'BLAKE3',
+    'KECCAK',
+    'SIGN',
+    'VERIFY',
   ];
-  const pathbits = ['SRV','VAULT','NODE','SHARD','CLUSTER','CORE','IO','BUS','NET','GPU0','GPU1','CPU0','MEM','CACHE','DISK0'];
+  const pathbits = [
+    'SRV',
+    'VAULT',
+    'NODE',
+    'SHARD',
+    'CLUSTER',
+    'CORE',
+    'IO',
+    'BUS',
+    'NET',
+    'GPU0',
+    'GPU1',
+    'CPU0',
+    'MEM',
+    'CACHE',
+    'DISK0',
+  ];
   const levels = ['INFO', 'WARN', 'TRACE', 'DEBUG'];
   let progress = 0;
 
+  /**
+   * Compose one mining/log-flavored line.
+   * @returns {string} A single line to append to the buffer.
+   */
   function makeLine() {
     const roll = Math.random();
     if (roll < 0.16) {
@@ -115,17 +203,53 @@ export const mining = (() => {
       return `[${timeStamp()}] BLOB  ${s}==`;
     } else if (roll < 0.8) {
       const words =
-        'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua'.split(' ');
+        'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua'.split(
+          ' '
+        );
       const n = randInt(6, 14);
-      const msg = Array.from({ length: n }, () => choice(words)).join(' ').toUpperCase();
+      const msg = Array.from({ length: n }, () => choice(words))
+        .join(' ')
+        .toUpperCase();
       return `[${timeStamp()}] NOTE  ${msg}.`;
     } else {
       return `[${timeStamp()}] STAT  LAT=${randInt(2, 80)}ms  SHARDS=${randInt(1, 6)}  TEMP=${randFloat(35, 78).toFixed(1)}°C  NONCE=0x${randHex(6)}`;
     }
   }
 
-  // ——— Mode API ———
+  // ——— Operator command generator ———
 
+  const pools = ['us-east', 'us-west', 'eu-central', 'ap-sg', 'local'];
+  const algos = ['sha256', 'blake3', 'argon2', 'scrypt', 'keccak'];
+  const files = ['dataset.bin', 'block.dat', 'header.hex', 'payload.raw', 'blob.b64', 'wallet.db'];
+  const addrs = () => '0x' + randHex(10);
+
+  /**
+   * Build a realistic operator command (lower-case with Unix-style flags).
+   * @returns {string} A shell-like command to type at the prompt.
+   */
+  function makeCommand() {
+    const t = Math.random();
+    if (t < 0.2) {
+      return `mine --pool ${choice(pools)} --threads ${randInt(2, 16)} --intensity ${randInt(1, 5)}`;
+    } else if (t < 0.4) {
+      return `hash --algo ${choice(algos)} --file ${choice(files)}`;
+    } else if (t < 0.6) {
+      return `submit --nonce 0x${randHex(6)} --job ${randInt(1000, 9999)}`;
+    } else if (t < 0.8) {
+      return `wallet send --to ${addrs()} --amt ${randInt(1, 5)}.${randInt(0, 99).toString().padStart(2, '0')}`;
+    } else {
+      return `status --verbose`;
+    }
+  }
+
+  // ——— internal helpers ———
+
+  /**
+   * Reset 2D canvas defaults and apply DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {number} dpr - Device pixel ratio used for transforms.
+   * @returns {void}
+   */
   function reset2D(g, dpr) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.globalAlpha = 1;
@@ -134,20 +258,11 @@ export const mining = (() => {
     g.shadowColor = 'rgba(0,0,0,0)';
   }
 
-  function paintBG(ctx) {
-    const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr, H = ctx.h / ctx.dpr;
-    g.save();
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = getBG();
-    g.fillRect(0, 0, W, H);
-    g.restore();
-  }
+  // ——— Mode API ———
 
   /**
    * Initialize metrics, buffers, and baseline drawing state.
-   * @param {*} ctx - Render context ({ canvas, ctx2d, dpr, w, h }).
+   * @param {VNRenderContext} ctx - Render context ({ canvas, ctx2d, dpr, w, h }).
    * @returns {void}
    */
   function init(ctx) {
@@ -174,14 +289,11 @@ export const mining = (() => {
     cursorBlinkMs = 0;
     promptCooldownAcc = promptCooldownMs; // allow prompt immediately
     burstLeft = 0;
-
-    // paint to current vibe background on init
-    paintBG(ctx);
   }
 
   /**
    * Recompute metrics on resize/orientation.
-   * @param {*} ctx - Render context to reinitialize with current dimensions.
+   * @param {VNRenderContext} ctx - Render context to reinitialize with current dimensions.
    * @returns {void}
    */
   function resize(ctx) {
@@ -190,13 +302,12 @@ export const mining = (() => {
 
   /**
    * Clear the canvas and the ring buffer.
-   * @param {*} ctx - Render context that owns the canvas to clear.
+   * @param {VNRenderContext} ctx - Render context that owns the canvas to clear.
    * @returns {void}
    */
   function clear(ctx) {
     buffer = [];
-    reset2D(ctx.ctx2d, ctx.dpr);
-    paintBG(ctx); // repaint vibe BG so a vibe change applies immediately
+    ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
   }
 
   /**
@@ -216,6 +327,12 @@ export const mining = (() => {
   }
 
   // --- speed mapping (Mining) ---
+  /**
+   * Update line/typing cadences from the global speed multiplier.
+   * Keeps 1.0× at ~150ms per line and ~26ms per typed char.
+   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
     emitIntervalMs = Math.max(30, Math.round(150 / m));
@@ -223,6 +340,10 @@ export const mining = (() => {
   }
 
   // --- prompt helpers ---
+  /**
+   * Start typing a new command at the prompt.
+   * @returns {void}
+   */
   function beginPrompt() {
     promptActive = true;
     promptLine = makeCommand();
@@ -231,26 +352,11 @@ export const mining = (() => {
     cursorBlinkMs = 0;
   }
 
-  const pools = ['us-east','us-west','eu-central','ap-sg','local'];
-  const algos = ['sha256','blake3','argon2','scrypt','keccak'];
-  const files = ['dataset.bin','block.dat','header.hex','payload.raw','blob.b64','wallet.db'];
-  const addrs = () => '0x' + randHex(10);
-
-  function makeCommand() {
-    const t = Math.random();
-    if (t < 0.2) {
-      return `mine --pool ${choice(pools)} --threads ${randInt(2, 16)} --intensity ${randInt(1, 5)}`;
-    } else if (t < 0.4) {
-      return `hash --algo ${choice(algos)} --file ${choice(files)}`;
-    } else if (t < 0.6) {
-      return `submit --nonce 0x${randHex(6)} --job ${randInt(1000, 9999)}`;
-    } else if (t < 0.8) {
-      return `wallet send --to ${addrs()} --amt ${randInt(1, 5)}.${randInt(0, 99).toString().padStart(2, '0')}`;
-    } else {
-      return `status --verbose`;
-    }
-  }
-
+  /**
+   * Advance typing for the operator prompt.
+   * @param {number} dt - Milliseconds since the last frame.
+   * @returns {void}
+   */
   function stepPrompt(dt) {
     promptAccumulator += dt;
     while (promptAccumulator >= typeSpeedMs && promptActive) {
@@ -272,27 +378,22 @@ export const mining = (() => {
   }
 
   // --- frame/draw ---
+  /**
+   * Render one frame with operator prompt + stream.
+   * @param {VNRenderContext} ctx - { ctx2d, w, h, dpr, elapsed, paused, speed }.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
-    // defensive: reset compositor every frame to avoid stale ops from other modes
-    reset2D(g, ctx.dpr);
-
     // per-mode speed mapping
     applySpeed(ctx.speed);
 
-    // soft trail fade TOWARD the vibe background (not black)
-    const BASE_FADE = 0.18;
-    const MIN_FADE = 0.05, MAX_FADE = 0.28;
-    const fadeAlpha = Math.max(MIN_FADE, Math.min(MAX_FADE, BASE_FADE));
-    g.save();
-    g.globalAlpha = fadeAlpha;
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = getBG();
+    // soft fade background (keep black; text color comes from vibe)
+    g.fillStyle = 'rgba(0,0,0,0.18)';
     g.fillRect(0, 0, W, H);
-    g.restore();
 
     const dt = ctx.elapsed || 16;
 
@@ -301,6 +402,7 @@ export const mining = (() => {
       if (promptActive) {
         stepPrompt(dt);
       } else {
+        // when no prompt, we can type a background line or emit normal lines
         if (partialLine) {
           typeAccumulator += dt;
           while (typeAccumulator >= typeSpeedMs && partialLine) {

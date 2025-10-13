@@ -16,7 +16,7 @@
   --log-fail: #ffb0b0;
 
   /* Per-vibe scanline defaults (your JS themes override these) */
-  --scanline-dark: #001003;  /* subtle dark stripe for classic vibe */
+  --scanline-dark: #001003; /* subtle dark stripe for classic vibe */
   --scanline-light: #002016; /* subtle light stripe for classic vibe */
 }
 
@@ -433,7 +433,7 @@ body.has-controls-visible .pos-bottom-right {
     transparent 1px,
     transparent 3px
   );
-  opacity: 0.16;            /* global strength for dark lines */
+  opacity: 0.16; /* global strength for dark lines */
   mix-blend-mode: multiply; /* deepens underlying pixels */
 }
 
@@ -446,6 +446,6 @@ body.has-controls-visible .pos-bottom-right {
     transparent 1px,
     transparent 3px
   );
-  opacity: 0.08;           /* global strength for light lines */
-  mix-blend-mode: screen;  /* lifts highlights without washing out */
+  opacity: 0.08; /* global strength for light lines */
+  mix-blend-mode: screen; /* lifts highlights without washing out */
 }

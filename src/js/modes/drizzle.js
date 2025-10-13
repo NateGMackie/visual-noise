@@ -34,7 +34,7 @@ export const drizzle = (() => {
   // Theme helpers (read live so vibe swaps apply instantly)
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
-  const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();   // supports #RRGGBB / #RRGGBBAA
+  const getBG = () => (readVar('--bg', '#000000') || '#000000').trim(); // supports #RRGGBB / #RRGGBBAA
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   const info = { family: 'rain', flavor: 'drizzle' };
@@ -53,10 +53,14 @@ export const drizzle = (() => {
 
   const snapToTailIndex = (mult) => {
     if (!Number.isFinite(mult)) return tailIndex;
-    let bestIdx = 1, best = Infinity;
+    let bestIdx = 1,
+      best = Infinity;
     for (let i = 1; i <= 10; i++) {
       const d = Math.abs(TAIL_STAGES[i] - mult);
-      if (d < best) { best = d; bestIdx = i; }
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+      }
     }
     return bestIdx;
   };
@@ -65,9 +69,13 @@ export const drizzle = (() => {
   const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
 
   // ---------- state ----------
-  let cols = 0, rows = 0, fontSize = 16, lineH = 18;
+  let cols = 0,
+    rows = 0,
+    fontSize = 16,
+    lineH = 18;
   /** @type {number[]} */ let drops = [];
-  let tickAcc = 0, tickMs = 80;
+  let tickAcc = 0,
+    tickMs = 80;
   let running = false;
 
   // one-time guards
@@ -75,6 +83,11 @@ export const drizzle = (() => {
   let keysBound = false;
 
   // ---------- layout / seeding ----------
+  /**
+   * Compute font metrics, grid dimensions, and seed initial drop positions.
+   * @param {RenderCtx} ctx - Render context with canvas size and DPR.
+   * @returns {void}
+   */
   function compute(ctx) {
     fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
     lineH = Math.round(fontSize * 1.2);
@@ -84,6 +97,12 @@ export const drizzle = (() => {
   }
 
   // small helpers
+  /**
+   * Reset 2D canvas defaults and apply the DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {number} dpr - Device pixel ratio used for transforms.
+   * @returns {void}
+   */
   function reset2D(g, dpr) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.globalAlpha = 1;
@@ -91,9 +110,16 @@ export const drizzle = (() => {
     g.shadowBlur = 0;
     g.shadowColor = 'rgba(0,0,0,0)';
   }
+
+  /**
+   * Paint the full canvas to the current vibe background color.
+   * @param {RenderCtx} ctx - Render context providing size and 2D context.
+   * @returns {void}
+   */
   function paintBG(ctx) {
     const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr, H = ctx.h / ctx.dpr;
+    const W = ctx.w / ctx.dpr,
+      H = ctx.h / ctx.dpr;
     g.save();
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
@@ -103,11 +129,16 @@ export const drizzle = (() => {
   }
 
   // ---------- lifecycle ----------
+  /**
+   * Initialize DPR, compute layout, wire bus once, and paint vibe background.
+   * @param {RenderCtx} ctx - Render context with canvas, dpr, and dimensions.
+   * @returns {void}
+   */
   function init(ctx) {
     const g = ctx.ctx2d;
     reset2D(g, ctx.dpr);
-    compute(ctx);      // seed columns
-    paintBG(ctx);      // lay vibe background
+    compute(ctx); // seed columns
+    paintBG(ctx); // lay vibe background
 
     if (!wiredBus) {
       const bus = (window.app && window.app.events) || window.events;
@@ -144,10 +175,19 @@ export const drizzle = (() => {
     emitSpawnStep();
   }
 
+  /**
+   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
+   * @param {RenderCtx} ctx - Updated render context with new size/DPR.
+   * @returns {void}
+   */
   function resize(ctx) {
     init(ctx);
   }
 
+  /**
+   * Begin animation and bind hotkeys (once).
+   * @returns {void}
+   */
   function start() {
     running = true;
     if (!keysBound) {
@@ -156,6 +196,10 @@ export const drizzle = (() => {
     }
   }
 
+  /**
+   * Stop animation and unbind hotkeys.
+   * @returns {void}
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -165,39 +209,78 @@ export const drizzle = (() => {
   }
 
   // IMPORTANT: on a clear (e.g., vibe change), we must RESEED and repaint BG
+  /**
+   * Reseed columns, reset compositor, and repaint to the vibe background.
+   * @param {RenderCtx} ctx - Render context used to reseed and repaint.
+   * @returns {void}
+   */
   function clear(ctx) {
-    compute(ctx);   // <-- reseed columns so drops exist immediately
+    compute(ctx); // <-- reseed columns so drops exist immediately
     reset2D(ctx.ctx2d, ctx.dpr);
-    paintBG(ctx);   // paint to vibe bg (don’t clear to transparent)
-    tickAcc = 0;    // reset tick accumulator to avoid long first delay
+    paintBG(ctx); // paint to vibe bg (don’t clear to transparent)
+    tickAcc = 0; // reset tick accumulator to avoid long first delay
   }
 
   // ---------- speed mapping (per global speed) ----------
+  /**
+   * Apply global speed multiplier to tick interval (lower tickMs = faster).
+   * @param {number} mult - Global speed multiplier (~0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
     tickMs = Math.max(16, Math.round(80 / m));
   }
 
   // ---------- hotkeys: Shift+Arrows ----------
+  /**
+   * Handle Shift+Arrow hotkeys to adjust tail and spawn stages.
+   * @param {KeyboardEvent} e - Keyboard event from window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     switch (e.key) {
       case 'ArrowUp':
-        if (tailIndex < 10) { tailIndex += 1; TAIL_MULT = TAIL_STAGES[tailIndex]; emit('rain.tail', Number(TAIL_MULT)); emitTailStep(); }
+        if (tailIndex < 10) {
+          tailIndex += 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT));
+          emitTailStep();
+        }
         break;
       case 'ArrowDown':
-        if (tailIndex > 1) { tailIndex -= 1; TAIL_MULT = TAIL_STAGES[tailIndex]; emit('rain.tail', Number(TAIL_MULT)); emitTailStep(); }
+        if (tailIndex > 1) {
+          tailIndex -= 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT));
+          emitTailStep();
+        }
         break;
       case 'ArrowRight':
-        if (spawnIndex < 10) { spawnIndex += 1; RESPAWN_P = SPAWN_STAGES[spawnIndex]; emit('rain.spawn', { index: spawnIndex, total: 10 }); }
+        if (spawnIndex < 10) {
+          spawnIndex += 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
         break;
       case 'ArrowLeft':
-        if (spawnIndex > 1) { spawnIndex -= 1; RESPAWN_P = SPAWN_STAGES[spawnIndex]; emit('rain.spawn', { index: spawnIndex, total: 10 }); }
+        if (spawnIndex > 1) {
+          spawnIndex -= 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
         break;
     }
   }
 
   // ---------- frame ----------
+  /**
+   * Render one frame and optionally advance column positions on tick.
+   * Fades toward the vibe background so hues follow the active theme.
+   * @param {RenderCtx} ctx - Render context including elapsed/speed/paused flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     tickAcc += ctx.elapsed;
@@ -211,8 +294,9 @@ export const drizzle = (() => {
     applySpeed(ctx.speed);
 
     // Trail fade: fade toward vibe background (NOT black)
-    const BASE_FADE = 0.10;
-    const MIN_FADE = 0.02, MAX_FADE = 0.25;
+    const BASE_FADE = 0.1;
+    const MIN_FADE = 0.02,
+      MAX_FADE = 0.25;
     const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
 
     g.save();
