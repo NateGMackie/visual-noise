@@ -1,28 +1,28 @@
-// src/js/modes/sysadmin.js
 /* eslint-env browser */
 
 import { randInt } from '../lib/index.js';
 
 /**
  * Treat the browser 2D context as an opaque type for JSDoc linting.
- * (Avoids jsdoc/no-undefined-types without changing runtime.)
  * @typedef {*} CanvasRenderingContext2D
  */
 /**
  * Render context passed to mode functions each frame.
+ * NOTE: The engine supplies w/h in DEVICE pixels; we normalize to CSS px with / dpr,
+ * matching the crypto mode’s approach.
  * @typedef {object} VNRenderContext
- * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR-normalized).
- * @property {number} w - Canvas width in CSS pixels.
- * @property {number} h - Canvas height in CSS pixels.
- * @property {number} dpr - Device pixel ratio used for transforms.
- * @property {number} elapsed - Milliseconds since the last frame.
- * @property {boolean} paused - Whether the animation is paused.
- * @property {number} speed - Global speed multiplier (≈0.4–1.6).
+ * @property {CanvasRenderingContext2D} ctx2d
+ * @property {number} w          // device pixels
+ * @property {number} h          // device pixels
+ * @property {number} dpr        // devicePixelRatio used for transforms
+ * @property {number} elapsed
+ * @property {boolean} paused
+ * @property {number} speed
  */
 
 /**
  * Sysadmin console: emits status lines (CPU/MEM/NET/DISK) with vibe-aware trail.
- * Exports standard mode API: init, resize, start, stop, frame, clear.
+ * Exports: init, resize, start, stop, frame, clear.
  */
 export const sysadmin = (() => {
   // ------- internal state -------
@@ -31,7 +31,7 @@ export const sysadmin = (() => {
   let cols = 80;
   let rows = 40;
 
-  /** @type {string[]} ring buffer of recent lines */
+  /** ring buffer of recent lines */
   let buffer = [];
   let maxLines = 200;
 
@@ -40,53 +40,29 @@ export const sysadmin = (() => {
   let emitIntervalMs = 140;
 
   // ------- theming -------
-  /**
-   * Read a CSS variable from :root with a fallback.
-   * @param {string} name - CSS variable name (e.g., "--fg").
-   * @param {string} fallback - Value to use if variable is empty/unset.
-   * @returns {string} Resolved CSS value.
-   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
-  /** @returns {string} Current vibe background color. */
   const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
-  /** @returns {string} Current vibe foreground color. */
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   // ------- line generators -------
   const barFill = '█';
   const barEmpty = '·';
 
-  /**
-   * Build a fixed-width ASCII bar for percentages.
-   * @param {number} pct - Percentage in the range 0..100.
-   * @param {number} [width] - Bar character width.
-   * @returns {string} A bar visualization like "█████···········".
-   */
   const makeBar = (pct, width = 20) => {
     const p = Math.max(0, Math.min(100, pct));
     const filled = Math.round((p / 100) * width);
     return barFill.repeat(filled) + barEmpty.repeat(width - filled);
   };
 
-  /** @returns {string} HH:MM:SS timestamp. */
   const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
-  /**
-   * Push a line into the ring buffer, trimming when over capacity.
-   * @param {string} l - Line to append.
-   * @returns {void}
-   */
   const push = (l) => {
     buffer.push(l);
     if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
   };
 
-  /**
-   * Compose one sysadmin-flavored line (CPU/MEM/DISK/NET or LOG).
-   * @returns {string} A formatted log/status line.
-   */
   function makeLine() {
     const r = Math.random();
     if (r < 0.2) {
@@ -125,129 +101,91 @@ export const sysadmin = (() => {
     return `[${timeStamp()}] ${lvl.padEnd(5, ' ')} ${msg}`;
   }
 
-  // ------- internal helpers -------
+  // ------- lifecycle -------
   /**
-   * Reset 2D canvas defaults and apply DPR transform.
-   * @param {CanvasRenderingContext2D} g - 2D drawing context.
-   * @param {number} dpr - Device pixel ratio used for transforms.
-   * @returns {void}
+   * Initialize DPR-safe canvas defaults and sizing (mirror crypto).
    */
-  function reset2D(g, dpr) {
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  function init(ctx) {
+    const g = ctx.ctx2d;
+
+    // Reset to identity, then apply DPR exactly once (mirror crypto).
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
     g.shadowBlur = 0;
     g.shadowColor = 'rgba(0,0,0,0)';
-  }
 
-  /**
-   * Paint the full canvas to the current vibe background color.
-   * @param {VNRenderContext} ctx - Render context.
-   * @returns {void}
-   */
-  function paintBG(ctx) {
-    const g = ctx.ctx2d;
+    // Normalize to CSS pixels like crypto does
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
-    g.save();
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = getBG();
-    g.fillRect(0, 0, W, H);
-    g.restore();
-  }
 
-  // ------- lifecycle -------
-  /**
-   * Initialize measurements, buffers, and baseline drawing state.
-   * @param {VNRenderContext} ctx - Render context ({ canvas, ctx2d, dpr, w, h, ... }).
-   * @returns {void}
-   */
-  function init(ctx) {
-    const g = ctx.ctx2d;
-    reset2D(g, ctx.dpr);
-
-    fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
+    // Typography & grid (identical scale rule as crypto)
+    fontSize = Math.max(12, Math.floor(0.018 * Math.min(W, H)));
     lineH = Math.floor(fontSize * 1.15);
-    rows = Math.floor(ctx.h / ctx.dpr / lineH);
-    cols = Math.floor(ctx.w / ctx.dpr / (fontSize * 0.62));
+    rows = Math.floor(H / lineH);
+    cols = Math.floor(W / (fontSize * 0.62));
 
     buffer = [];
     maxLines = rows * 5;
     emitAccumulator = 0;
 
-    paintBG(ctx); // initial paint to vibe background
+    // Paint base background
+    g.save();
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
   }
 
-  /**
-   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
-   * @param {VNRenderContext} ctx - Render context.
-   * @returns {void}
-   */
   function resize(ctx) {
     init(ctx);
   }
 
-  /**
-   * Start emitting lines.
-   * @returns {void}
-   */
   function start() {
     running = true;
   }
 
-  /**
-   * Stop emitting lines.
-   * @returns {void}
-   */
   function stop() {
     running = false;
   }
 
-  /**
-   * Clear the canvas and line buffer, repainting to the vibe background.
-   * @param {VNRenderContext} ctx - Render context.
-   * @returns {void}
-   */
   function clear(ctx) {
     buffer = [];
-    reset2D(ctx.ctx2d, ctx.dpr);
-    paintBG(ctx); // repaint background so vibe change applies immediately
+    const g = ctx.ctx2d;
+
+    // Reset + DPR (mirror crypto.clear)
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+
+    g.save();
+    g.globalAlpha = 1;
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
   }
 
   // ------- speed mapping -------
-  /**
-   * Update the line-emission cadence from the global speed multiplier.
-   * Keeps ~140ms between lines at 1.0×; higher multiplier emits faster.
-   * @param {number} mult - Global speed multiplier (≈0.4–1.6).
-   * @returns {void}
-   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
-    const midEmit = 140; // 140ms between lines @ 1.0×
+    const midEmit = 140; // sysadmin feels a tad quicker than crypto
     emitIntervalMs = Math.max(20, Math.round(midEmit / m));
   }
 
   // ------- frame -------
-  /**
-   * Render one frame and, if running, emit lines on cadence.
-   * Trail fades toward the vibe background instead of fixed black.
-   * @param {VNRenderContext} ctx - Render context for this frame.
-   * @returns {void}
-   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
     const H = ctx.h / ctx.dpr;
 
-    reset2D(g, ctx.dpr);
     applySpeed(ctx.speed);
 
-    // Trail fade toward current vibe background
-    const BASE_FADE = 0.18;
-    const fadeAlpha = Math.max(0.05, Math.min(0.25, BASE_FADE));
+    // Trail fade toward vibe background (mirror crypto’s approach)
     g.save();
-    g.globalAlpha = fadeAlpha;
+    g.globalAlpha = 0.18;
     g.fillStyle = getBG();
     g.fillRect(0, 0, W, H);
     g.restore();
@@ -261,12 +199,11 @@ export const sysadmin = (() => {
       }
     }
 
-    // Draw buffer lines
+    // Draw buffer
     const lines = buffer.slice(Math.max(0, buffer.length - rows));
-    const fg = getFG();
     g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     g.textBaseline = 'top';
-    g.fillStyle = fg;
+    g.fillStyle = getFG();
 
     let y = 4;
     const xPad = 8;

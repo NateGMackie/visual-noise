@@ -2,7 +2,7 @@
 
 import { registry as modeRegistry } from './modes/index.js';
 import { DEFAULT_SPEED_MODEL } from './lib/speed.js';
-import { applyEffects } from './ui/effects.js'; // <-- missing import (fix)
+import { applyEffects } from './ui/effects.js';
 
 /**
  * -------------------------
@@ -16,9 +16,9 @@ export const cfg = {
   speed: 0.7, // legacy multiplier; will stay coherent with speed index
   paused: false, // running by default
   fx: {
-    // <-- add defaults so callers have a shape
-    scanlines: false,
-    flicker: false,
+    // DEFAULTS ON
+    scanlines: true,
+    flicker: true,
   },
 };
 
