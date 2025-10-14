@@ -71,6 +71,10 @@ export const digitalrain = (() => {
   /** @type {RenderCtx|null} */
   let lastCtx = null;
 
+  // Defer background repaint to next frame (avoid mid-frame re-entrancy)
+let needsBGRepaint = false;
+
+
   // ----- layout / seed -----
   /**
    * Compute font size, column count, and seed starting rows for each drop.
@@ -151,10 +155,11 @@ export const digitalrain = (() => {
           emitSpawnStep();
         });
 
-        // On vibe change, repaint background immediately.
-        bus.on('vibe', () => {
-          if (lastCtx) paintBG(lastCtx);
-        });
+        // Vibe change: request a repaint next frame (don't touch state mid-frame)
+bus.on('vibe', () => {
+  needsBGRepaint = true;
+});
+
       }
       wiredBus = true;
     }
@@ -204,11 +209,12 @@ export const digitalrain = (() => {
    * @returns {void}
    */
   function clear(ctx) {
-    drops = [];
-    lastCtx = ctx;
-    reset2D(ctx.ctx2d, ctx.dpr);
-    paintBG(ctx);
-  }
+  // Keep drop state; just repaint the background so trails can continue.
+  lastCtx = ctx;
+  reset2D(ctx.ctx2d, ctx.dpr);
+  paintBG(ctx);
+}
+
 
   // ----- speed mapping -----
   /**
@@ -280,53 +286,75 @@ export const digitalrain = (() => {
    * @returns {void}
    */
   function frame(ctx) {
-    const g = ctx.ctx2d;
-    tickAcc += ctx.elapsed;
-    const W = ctx.w / ctx.dpr,
-      H = ctx.h / ctx.dpr;
+  const g = ctx.ctx2d;
+  tickAcc += ctx.elapsed;
+  const W = ctx.w / ctx.dpr, H = ctx.h / ctx.dpr;
 
-    // reset compositor every frame (avoids stale ops from other modes)
-    reset2D(g, ctx.dpr);
+  // Reset compositor every frame (avoids stale ops from other modes)
+  reset2D(g, ctx.dpr);
 
-    // Apply per-mode speed
-    applySpeed(ctx.speed);
+  // If a vibe just happened, repaint once now (no mid-frame paint)
+  if (needsBGRepaint && lastCtx) {
+    paintBG(lastCtx);
+    needsBGRepaint = false;
+  }
 
-    // Trail fade toward the vibe background (not black)
-    const BASE_FADE = 0.08;
-    const MIN_FADE = 0.02,
-      MAX_FADE = 0.2;
-    const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
+  // Apply per-mode speed
+  applySpeed(ctx.speed);
 
-    g.save();
-    g.globalAlpha = fadeAlpha;
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = getBG();
-    g.fillRect(0, 0, W, H);
-    g.restore();
-
-    // draw streams
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    g.textBaseline = 'top';
-    g.fillStyle = getFG();
-
-    const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
-    if (doAdvance) tickAcc -= tickMs;
-
+  // Ensure drops array is valid and matches column count
+  if (drops.length !== cols) {
+    const next = new Array(cols);
+    const n = Math.min(cols, drops.length);
+    for (let i = 0; i < n; i++) {
+      const v = drops[i];
+      next[i] = Number.isFinite(v) ? v : Math.floor(Math.random() * -40);
+    }
+    for (let i = n; i < cols; i++) {
+      next[i] = Math.floor(Math.random() * -40);
+    }
+    drops = next;
+  } else {
     for (let i = 0; i < cols; i++) {
-      const x = i * fontSize;
-      const y = drops[i] * fontSize;
-      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-      g.fillText(ch, x, y);
-
-      if (!doAdvance) continue;
-
-      if (y > H && Math.random() < RESPAWN_P) {
-        drops[i] = Math.floor(-20 * Math.random()); // restart above top
-      } else {
-        drops[i] += 1; // one row per tick; speed via tickMs
-      }
+      if (!Number.isFinite(drops[i])) drops[i] = Math.floor(Math.random() * -40);
     }
   }
+
+  // Trail fade toward the vibe background (keeps theme tint)
+  const BASE_FADE = 0.08;
+  const MIN_FADE = 0.02, MAX_FADE = 0.2;
+  const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
+
+  g.save();
+  g.globalAlpha = fadeAlpha;
+  g.globalCompositeOperation = 'source-over';
+  g.fillStyle = getBG();
+  g.fillRect(0, 0, W, H);
+  g.restore();
+
+  // Draw streams
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  g.textBaseline = 'top';
+  g.fillStyle = getFG();
+
+  const doAdvance = running && !ctx.paused && tickAcc >= tickMs;
+  if (doAdvance) tickAcc -= tickMs;
+
+  for (let i = 0; i < cols; i++) {
+    const x = i * fontSize;
+    const y = drops[i] * fontSize;
+    const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+    g.fillText(ch, x, y);
+
+    if (!doAdvance) continue;
+
+    if (y > H && Math.random() < RESPAWN_P) {
+      drops[i] = Math.floor(-20 * Math.random()); // restart above top
+    } else {
+      drops[i] += 1; // one row per tick; speed via tickMs
+    }
+  }
+}
 
   return { init, resize, start, stop, frame, clear };
 })();
