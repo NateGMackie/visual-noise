@@ -2,10 +2,10 @@
 /* global CustomEvent, KeyboardEvent */
 // src/js/ui/gestures.js
 // Mobile swipe gestures mirroring your keyboard logic & clickable HUD.
-//  - Swipe LEFT  -> cycle family backward (same as '[')
-//  - Swipe RIGHT -> cycle family forward  (same as ']')
-//  - Swipe UP    -> cycle theme/vibe      (same as 't')
-//  - Swipe DOWN  -> cycle flavor forward  (same as Shift+']')
+//  - Swipe LEFT  -> cycle genre backward  (same as '[')
+//  - Swipe RIGHT -> cycle genre forward   (same as ']')
+//  - Swipe UP    -> cycle vibe            (same as 't')
+//  - Swipe DOWN  -> next style            (same as '.')
 //
 // Pull-to-refresh safe: We only block downward drags when not at the very top.
 // Landscape-friendly thresholds. No imports. Auto-inits on DOMContentLoaded.
@@ -59,7 +59,7 @@ function openControls() {
 
 /**
  * Synthesize a keydown for the global hotkey handler.
- * @param {string} key - Visible key (e.g., '[', ']', 't').
+ * @param {string} key - Visible key (e.g., '[', ']', 't', ',', '.').
  * @param {{shiftKey?:boolean, ctrlKey?:boolean, altKey?:boolean, metaKey?:boolean}} [opts] - Modifier flags.
  * @returns {void}
  */
@@ -160,7 +160,7 @@ function onEnd() {
   const absX = Math.abs(dx),
     absY = Math.abs(dy);
 
-  // Bottom-edge tap opens controls/nav
+  // Bottom-edge tap opens controls/HUD
   const TAP_TIME = 300,
     TAP_MOVE = 10,
     EDGE_PX = 24;
@@ -175,22 +175,22 @@ function onEnd() {
   if (absX < MIN_DIST && absY < MIN_DIST) return;
 
   if (absX >= absY && absY <= MAX_OFF_AXIS) {
-    // Horizontal
+    // Horizontal → genre
     if (dx > 0) {
-      // RIGHT: family backward ('[')
+      // RIGHT: genre backward ('[')
       synthKey('[');
     } else {
-      // LEFT: family forward (']')
+      // LEFT: genre forward (']')
       synthKey(']');
     }
   } else if (absY > absX && absX <= MAX_OFF_AXIS) {
     // Vertical
     if (dy < 0) {
-      // UP: theme/vibe cycle (t)
+      // UP: cycle vibe ('t')
       synthKey('t');
     } else {
-      // DOWN: flavor forward (Shift+']')
-      synthKey(']', { shiftKey: true });
+      // DOWN: next style ('.')
+      synthKey('.');
     }
   }
 }
