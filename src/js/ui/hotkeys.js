@@ -30,7 +30,7 @@ export function installHotkeys({
   toggleScanlines,
   toggleFlicker,
 }) {
-    const helpHTML = `
+  const helpHTML = `
     <div class="hud-help">
       <div><strong>Families:</strong> [ / ]</div>
       <div><strong>Flavors:</strong> ; / '  <span class="alt">or Shift+[ / Shift+]</span></div>
@@ -55,7 +55,7 @@ export function installHotkeys({
     const tag = el.tagName?.toLowerCase();
     return tag === 'input' || tag === 'textarea' || el.isContentEditable;
   };
-  
+
   // if (el.repeat) return;
 
   window.addEventListener(
@@ -81,15 +81,21 @@ export function installHotkeys({
       // --- Controls toggle: m ---
       if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
 
-            // --- Vibes prev/next: , / . (no modifiers) ---
+      // --- Vibes prev/next: , / . (no modifiers) ---
       if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Comma' || k === ',')) {
         return doAct(cycleTheme, -1);
       }
-      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Period' || k === '.')) {
+      if (
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (code === 'Period' || k === '.')
+      ) {
         return doAct(cycleTheme, +1);
       }
 
-            // --- Genres prev/next: [ / ] ---
+      // --- Genres prev/next: [ / ] ---
       if (!s && !e.altKey && !e.ctrlKey && !e.metaKey && (k === '[' || code === 'BracketLeft')) {
         return doAct(cycleFamily, -1);
       }
@@ -97,9 +103,14 @@ export function installHotkeys({
         return doAct(cycleFamily, +1);
       }
 
-
-            // --- Styles prev/next: ; / ' (no modifiers) ---
-      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Semicolon' || k === ';')) {
+      // --- Styles prev/next: ; / ' (no modifiers) ---
+      if (
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        (code === 'Semicolon' || k === ';')
+      ) {
         return doAct(cycleFlavor, -1);
       }
       if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Quote' || k === "'")) {

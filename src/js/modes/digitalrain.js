@@ -28,6 +28,12 @@ export const digitalrain = (() => {
   const getFG = () => (readVar('--fg', '#0f0') || '#0f0').trim();
 
   // Reset to identity, then apply DPR exactly once
+  /**
+   * Reset 2D canvas defaults and apply a DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context to reset.
+   * @param {number} dpr - Device pixel ratio to apply to the transform.
+   * @returns {void}
+   */
   function reset2D(g, dpr) {
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -49,10 +55,14 @@ export const digitalrain = (() => {
   const clampStep = (i) => Math.max(1, Math.min(10, Math.round(i)));
   const snapToTailIndex = (mult) => {
     if (!Number.isFinite(mult)) return tailIndex;
-    let bestIdx = 1, best = Infinity;
+    let bestIdx = 1,
+      best = Infinity;
     for (let i = 1; i <= 10; i++) {
       const d = Math.abs(TAIL_STAGES[i] - mult);
-      if (d < best) { best = d; bestIdx = i; }
+      if (d < best) {
+        best = d;
+        bestIdx = i;
+      }
     }
     return bestIdx;
   };
@@ -61,9 +71,12 @@ export const digitalrain = (() => {
   const emitSpawnStep = () => emit('rain.spawn.step', { index: spawnIndex, total: 10 });
 
   // ----- state -----
-  let cols = 0, fontSize = 16;
+  let cols = 0,
+    fontSize = 16;
   /** @type {number[]} */ let drops = [];
-  let running = false, tickAcc = 0, tickMs = 75;
+  let running = false,
+    tickAcc = 0,
+    tickMs = 75;
 
   // one-time guards
   let wiredBus = false;
@@ -80,6 +93,8 @@ export const digitalrain = (() => {
   /**
    * Compute font size, column count, and seed starting rows for each drop.
    * Layout is based on CSS pixels (device px / dpr).
+   * @param {RenderCtx} ctx - Render context with DPR and device-pixel sizes.
+   * @returns {void}
    */
   function calc(ctx) {
     const W = ctx.w / ctx.dpr;
@@ -97,10 +112,13 @@ export const digitalrain = (() => {
 
   /**
    * Paint the full canvas to the current vibe background color.
+   * @param {RenderCtx} ctx - Render context used to compute CSS-px dimensions.
+   * @returns {void}
    */
   function paintBG(ctx) {
     const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr, H = ctx.h / ctx.dpr;
+    const W = ctx.w / ctx.dpr,
+      H = ctx.h / ctx.dpr;
     g.save();
     g.globalAlpha = 1;
     g.globalCompositeOperation = 'source-over';
@@ -110,6 +128,11 @@ export const digitalrain = (() => {
   }
 
   // ----- lifecycle -----
+  /**
+   * Initialize DPR, compute layout, wire event bus once, and paint vibe background.
+   * @param {RenderCtx} ctx - Render context with 2D canvas, sizes, and DPR.
+   * @returns {void}
+   */
   function init(ctx) {
     lastCtx = ctx;
     const g = ctx.ctx2d;
@@ -147,7 +170,9 @@ export const digitalrain = (() => {
         });
 
         // Vibe change: request a repaint next frame
-        bus.on('vibe', () => { needsBGRepaint = true; });
+        bus.on('vibe', () => {
+          needsBGRepaint = true;
+        });
       }
       wiredBus = true;
     }
@@ -158,10 +183,19 @@ export const digitalrain = (() => {
     emitSpawnStep();
   }
 
+  /**
+   * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
+   * @param {RenderCtx} ctx - Render context with updated sizes/DPR.
+   * @returns {void}
+   */
   function resize(ctx) {
     init(ctx);
   }
 
+  /**
+   * Begin animation and bind hotkeys (once).
+   * @returns {void}
+   */
   function start() {
     running = true;
     if (!keysBound) {
@@ -170,6 +204,10 @@ export const digitalrain = (() => {
     }
   }
 
+  /**
+   * Stop animation and unbind hotkeys.
+   * @returns {void}
+   */
   function stop() {
     running = false;
     if (keysBound) {
@@ -178,6 +216,11 @@ export const digitalrain = (() => {
     }
   }
 
+  /**
+   * Clear and repaint vibe background; also remember ctx for future repaints.
+   * @param {RenderCtx} ctx - Render context used to repaint background.
+   * @returns {void}
+   */
   function clear(ctx) {
     lastCtx = ctx;
     reset2D(ctx.ctx2d, ctx.dpr);
@@ -185,37 +228,79 @@ export const digitalrain = (() => {
   }
 
   // ----- speed mapping -----
+  /**
+   * Apply global speed multiplier to tick interval (lower tickMs = faster).
+   * @param {number} mult - Global speed multiplier (~0.4–1.6).
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = clamp(Number(mult) || 1, 0.4, 1.6);
     tickMs = Math.max(16, Math.round(75 / m));
   }
 
   // ----- hotkeys: Shift+Arrows -----
+  /**
+   * Handle Shift+Arrow hotkeys to adjust tail and spawn stages.
+   * @param {KeyboardEvent} e - Keyboard event from the window.
+   * @returns {void}
+   */
   function onKey(e) {
     if (!e.shiftKey) return;
     let handled = false;
     switch (e.key) {
       case 'ArrowUp':
-        if (tailIndex < 10) { tailIndex += 1; TAIL_MULT = TAIL_STAGES[tailIndex]; emit('rain.tail', Number(TAIL_MULT)); emitTailStep(); }
-        handled = true; break;
+        if (tailIndex < 10) {
+          tailIndex += 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT));
+          emitTailStep();
+        }
+        handled = true;
+        break;
       case 'ArrowDown':
-        if (tailIndex > 1) { tailIndex -= 1; TAIL_MULT = TAIL_STAGES[tailIndex]; emit('rain.tail', Number(TAIL_MULT)); emitTailStep(); }
-        handled = true; break;
+        if (tailIndex > 1) {
+          tailIndex -= 1;
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emit('rain.tail', Number(TAIL_MULT));
+          emitTailStep();
+        }
+        handled = true;
+        break;
       case 'ArrowRight':
-        if (spawnIndex < 10) { spawnIndex += 1; RESPAWN_P = SPAWN_STAGES[spawnIndex]; emit('rain.spawn', { index: spawnIndex, total: 10 }); }
-        handled = true; break;
+        if (spawnIndex < 10) {
+          spawnIndex += 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
+        handled = true;
+        break;
       case 'ArrowLeft':
-        if (spawnIndex > 1) { spawnIndex -= 1; RESPAWN_P = SPAWN_STAGES[spawnIndex]; emit('rain.spawn', { index: spawnIndex, total: 10 }); }
-        handled = true; break;
+        if (spawnIndex > 1) {
+          spawnIndex -= 1;
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emit('rain.spawn', { index: spawnIndex, total: 10 });
+        }
+        handled = true;
+        break;
     }
-    if (handled) { e.preventDefault(); e.stopPropagation(); }
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }
 
   // ----- frame -----
+  /**
+   * Render one frame and optionally advance column positions on tick.
+   * Trail fade is toward the vibe background so hues follow the active theme.
+   * @param {RenderCtx} ctx - Render context including timing, DPR, and flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     tickAcc += ctx.elapsed;
-    const W = ctx.w / ctx.dpr, H = ctx.h / ctx.dpr;
+    const W = ctx.w / ctx.dpr,
+      H = ctx.h / ctx.dpr;
 
     // If a vibe just happened, repaint once now
     if (needsBGRepaint && lastCtx) {
@@ -230,16 +315,19 @@ export const digitalrain = (() => {
     if (drops.length !== cols) {
       const next = new Array(cols);
       const n = Math.min(cols, drops.length);
-      for (let i = 0; i < n; i++) next[i] = Number.isFinite(drops[i]) ? drops[i] : Math.floor(Math.random() * -40);
+      for (let i = 0; i < n; i++)
+        next[i] = Number.isFinite(drops[i]) ? drops[i] : Math.floor(Math.random() * -40);
       for (let i = n; i < cols; i++) next[i] = Math.floor(Math.random() * -40);
       drops = next;
     } else {
-      for (let i = 0; i < cols; i++) if (!Number.isFinite(drops[i])) drops[i] = Math.floor(Math.random() * -40);
+      for (let i = 0; i < cols; i++)
+        if (!Number.isFinite(drops[i])) drops[i] = Math.floor(Math.random() * -40);
     }
 
     // Trail fade toward the vibe background (keeps theme tint)
     const BASE_FADE = 0.08;
-    const MIN_FADE = 0.02, MAX_FADE = 0.2;
+    const MIN_FADE = 0.02,
+      MAX_FADE = 0.2;
     const fadeAlpha = clamp(BASE_FADE / TAIL_MULT, MIN_FADE, MAX_FADE);
 
     g.save();

@@ -1,4 +1,5 @@
 /* eslint-env browser */
+/** @typedef {unknown} HTMLElement */
 // src/js/main.js
 
 // Canvas + utils (centralized DPR, resize, clear, typography)
@@ -35,6 +36,58 @@ const ctx = {
   // request a full clear on next frame (e.g., after mode switch / orientation change)
   needsFullClear: false,
 };
+
+// --- MODE-SCOPED THEME OVERRIDES --------------------------------------------
+
+/**
+ * Neutral scanline colors to use when a mode should ignore vibe tinting.
+ * Keep these grayscale so visuals keep their own palette.
+ */
+const NEUTRAL_SCANLINES = {
+  '--scanline-dark': 'rgba(0,0,0,0.90)',
+  '--scanline-light': 'rgba(255,255,255,0.22)',
+};
+
+/**
+ * Modes that should NOT inherit vibe colors for scanlines.
+ * (Use registry keys exactly as defined in state.js)
+ */
+const VIBE_IMMUNE = new Set(['liveOutput', 'coding', 'matrix', 'fire']);
+
+/**
+ * Return elements that host the scanlines pseudo-elements.
+ * @returns {HTMLElement[]} Elements (stage, body) that should receive scanline CSS vars.
+ */
+function scanlineHosts() {
+  // Your CSS says: "Apply .scanlines to <body> or #stage to enable"
+  // We’ll cover both, but body is the one used by effects right now.
+  const hosts = [];
+  const stage = document.getElementById('stage');
+  if (stage) hosts.push(stage);
+  if (document.body) hosts.push(document.body);
+  return hosts;
+}
+
+/**
+ * Apply or clear mode-scoped CSS variables on the scanlines host(s)
+ * so the overlay uses neutral colors in vibe-immune modes.
+ * @param {string} modeName - Registry key of the active mode (e.g., "matrix", "fire").
+ * @returns {void}
+ */
+function applyModeScopedScanlinesForMode(modeName) {
+  const immune = VIBE_IMMUNE.has(modeName);
+  for (const host of scanlineHosts()) {
+    // Always clear first (restores current vibe defaults)
+    host.style.removeProperty('--scanline-dark');
+    host.style.removeProperty('--scanline-light');
+
+    // In immune modes, override to neutral grayscale regardless of vibe
+    if (immune) {
+      host.style.setProperty('--scanline-dark', NEUTRAL_SCANLINES['--scanline-dark']);
+      host.style.setProperty('--scanline-light', NEUTRAL_SCANLINES['--scanline-light']);
+    }
+  }
+}
 
 // Active mode orchestration
 let activeModule = null;
@@ -152,8 +205,10 @@ function run(t) {
 
   // ---------- Active mode bootstrap ----------
   /**
-   * Start a mode by registry name; falls back to crypto if missing.
-   * @param {string} modeName - Registry key of the mode to start.
+   * Start a mode by registry name; falls back to "crypto" if missing.
+   * Also applies neutral scanlines for vibe-immune modes so vibe color doesn't tint them.
+   * @param {string} modeName - Registry key for the mode to start (e.g., "crypto", "matrix").
+   * @returns {void}
    */
   function startModeByName(modeName) {
     if (loopId) window.cancelAnimationFrame(loopId);
@@ -162,7 +217,11 @@ function run(t) {
     refreshLikeModeChange();
     activeModule = modeRegistry[modeName] ?? modeRegistry.crypto;
 
-    // Footer labels — maintain both new (genre/style/vibe) and legacy (mode/type/theme) IDs
+    // ----- Scanlines override just for vibe-immune modes -----
+    applyModeScopedScanlinesForMode(modeName);
+    // ---------------------------------------------------------
+
+    // Footer labels — keep your existing labeling logic
     let genreLabel, styleLabel;
     if (typeof labelsForGenreStyle === 'function') {
       const out = labelsForGenreStyle(modeName);
@@ -173,7 +232,6 @@ function run(t) {
       genreLabel = familyLabel;
       styleLabel = typeLabel;
     }
-
     const genreEl = document.getElementById('genreName') || document.getElementById('modeName');
     const styleEl = document.getElementById('styleName') || document.getElementById('typeName');
     if (genreEl) genreEl.textContent = genreLabel;
@@ -248,10 +306,11 @@ function run(t) {
   /**
    * Apply a vibe (theme) and update the HUD label,
    * then force the active mode to repaint to the new background.
+   * Also re-assert scanline overrides for vibe-immune modes.
    * @param {string} v - Vibe key to apply (e.g., 'classic', 'gameboy').
    */
   function handleVibe(v) {
-    // Apply CSS vars
+    // Apply CSS vars at :root
     applyTheme(v);
 
     // Update HUD
@@ -261,8 +320,12 @@ function run(t) {
       vibeEl.dataset.vibe = v;
     }
 
-    // IMPORTANT: repaint to the new bg immediately so stale opaque pixels don't linger.
-    // Prefer the mode's own clear() (it paints to --bg); otherwise request a hard clear.
+    // Re-assert scanline overrides for current mode (if immune)
+    // We don't have the active mode name here, but we can infer it from cfg.persona.
+    // (cfg.persona is maintained by setMode in state.js)
+    applyModeScopedScanlinesForMode(window.app?.state?.persona || cfg?.persona || 'crypto');
+
+    // Repaint the canvas to the new bg immediately
     if (activeModule?.clear) {
       activeModule.clear(ctx);
     } else {
