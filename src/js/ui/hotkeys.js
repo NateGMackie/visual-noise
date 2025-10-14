@@ -30,12 +30,12 @@ export function installHotkeys({
   toggleScanlines,
   toggleFlicker,
 }) {
-  const helpHTML = `
+    const helpHTML = `
     <div class="hud-help">
-      <div><strong>Families:</strong> [ / ]  <span class="alt">or , / .</span></div>
-      <div><strong>Flavors:</strong> Shift+[ / Shift+]  <span class="alt">or ; / '</span></div>
+      <div><strong>Families:</strong> [ / ]</div>
+      <div><strong>Flavors:</strong> ; / '  <span class="alt">or Shift+[ / Shift+]</span></div>
       <div><strong>Modes:</strong> 1–9, 0 = 10</div>
-      <div><strong>Themes:</strong> t / Shift+T</div>
+      <div><strong>Themes (Vibes):</strong> , / .  <span class="alt">or t / Shift+T</span></div>
       <div><strong>Controls:</strong> m (toggle)</div>
       <div><strong>Keep&nbsp;Awake:</strong> a</div>
       <div><strong>Scanlines:</strong> s</div>
@@ -43,6 +43,7 @@ export function installHotkeys({
       <div><strong>Clear:</strong> c</div>
     </div>
   `;
+
   try {
     setHudHelp?.(helpHTML);
   } catch {
@@ -54,6 +55,8 @@ export function installHotkeys({
     const tag = el.tagName?.toLowerCase();
     return tag === 'input' || tag === 'textarea' || el.isContentEditable;
   };
+  
+  // if (el.repeat) return;
 
   window.addEventListener(
     'keydown',
@@ -78,24 +81,28 @@ export function installHotkeys({
       // --- Controls toggle: m ---
       if (!s && (k === 'm' || k === 'M')) return doAct(toggleControls);
 
-      // --- Theme next/prev: t / Shift+T ---
-      if ((k === 't' || k === 'T') && !e.altKey && !e.ctrlKey && !e.metaKey) {
-        return doAct(cycleTheme, s ? -1 : +1);
+            // --- Vibes prev/next: , / . (no modifiers) ---
+      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Comma' || k === ',')) {
+        return doAct(cycleTheme, -1);
+      }
+      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Period' || k === '.')) {
+        return doAct(cycleTheme, +1);
       }
 
-      // --- Families prev/next: [ / ]  (fallback , / .) ---
-      if (!s && (k === '[' || code === 'BracketLeft' || k === ',' || code === 'Comma')) {
+            // --- Genres prev/next: [ / ] ---
+      if (!s && !e.altKey && !e.ctrlKey && !e.metaKey && (k === '[' || code === 'BracketLeft')) {
         return doAct(cycleFamily, -1);
       }
-      if (!s && (k === ']' || code === 'BracketRight' || k === '.' || code === 'Period')) {
+      if (!s && !e.altKey && !e.ctrlKey && !e.metaKey && (k === ']' || code === 'BracketRight')) {
         return doAct(cycleFamily, +1);
       }
 
-      // --- Flavors prev/next: Shift+[ / Shift+]  (fallback ; / ') ---
-      if (s && (k === '{' || code === 'BracketLeft' || k === ';' || code === 'Semicolon')) {
+
+            // --- Styles prev/next: ; / ' (no modifiers) ---
+      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Semicolon' || k === ';')) {
         return doAct(cycleFlavor, -1);
       }
-      if (s && (k === '}' || code === 'BracketRight' || k === "'" || code === 'Quote')) {
+      if (!e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey && (code === 'Quote' || k === "'")) {
         return doAct(cycleFlavor, +1);
       }
 
