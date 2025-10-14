@@ -89,8 +89,7 @@ export const mining = (() => {
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   /** @returns {string} Current vibe background color. */
-const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
-
+  const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
 
   /**
    * Random float in the half-open interval [min, max).
@@ -255,16 +254,15 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
    * @returns {void}
    */
   function reset2D(g, dpr) {
-  // Reset to identity, then apply DPR exactly once
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Reset to identity, then apply DPR exactly once
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.shadowBlur = 0;
-  g.shadowColor = 'rgba(0,0,0,0)';
-}
-
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+  }
 
   // ——— Mode API ———
 
@@ -274,42 +272,41 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
    * @returns {void}
    */
   function init(ctx) {
-  const g = ctx.ctx2d;
-  reset2D(g, ctx.dpr);
+    const g = ctx.ctx2d;
+    reset2D(g, ctx.dpr);
 
-  // Use CSS pixels for all layout math
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+    // Use CSS pixels for all layout math
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  fontSize = Math.max(12, Math.floor(0.018 * Math.min(W, H)));
-  lineH = Math.floor(fontSize * 1.15);
-  rows = Math.floor(H / lineH);
-  cols = Math.floor(W / (fontSize * 0.62));
+    fontSize = Math.max(12, Math.floor(0.018 * Math.min(W, H)));
+    lineH = Math.floor(fontSize * 1.15);
+    rows = Math.floor(H / lineH);
+    cols = Math.floor(W / (fontSize * 0.62));
 
-  buffer = [];
-  maxLines = rows * 5;
+    buffer = [];
+    maxLines = rows * 5;
 
-  emitAccumulator = 0;
-  typeAccumulator = 0;
-  partialLine = null;
-  partialIdx = 0;
+    emitAccumulator = 0;
+    typeAccumulator = 0;
+    partialLine = null;
+    partialIdx = 0;
 
-  // prompt state
-  promptActive = false;
-  promptLine = '';
-  promptIdx = 0;
-  promptAccumulator = 0;
-  cursorBlinkMs = 0;
-  promptCooldownAcc = promptCooldownMs; // allow prompt immediately
-  burstLeft = 0;
+    // prompt state
+    promptActive = false;
+    promptLine = '';
+    promptIdx = 0;
+    promptAccumulator = 0;
+    cursorBlinkMs = 0;
+    promptCooldownAcc = promptCooldownMs; // allow prompt immediately
+    burstLeft = 0;
 
-  // Paint base background to current vibe bg
-  g.save();
-  g.fillStyle = getBG();
-  g.fillRect(0, 0, W, H);
-  g.restore();
-}
-
+    // Paint base background to current vibe bg
+    g.save();
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
+  }
 
   /**
    * Recompute metrics on resize/orientation.
@@ -321,26 +318,25 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
   }
 
   /**
- * Clear the canvas and the ring buffer (respect vibe background).
- * @param {VNRenderContext} ctx
- * @returns {void}
- */
-function clear(ctx) {
-  buffer = [];
-  const g = ctx.ctx2d;
+   * Clear the canvas and the ring buffer (respect vibe background).
+   * @param {VNRenderContext} ctx - Render context used to repaint with the current vibe background.
+   * @returns {void}
+   */
+  function clear(ctx) {
+    buffer = [];
+    const g = ctx.ctx2d;
 
-  reset2D(g, ctx.dpr);
+    reset2D(g, ctx.dpr);
 
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  g.save();
-  g.globalAlpha = 1;
-  g.fillStyle = getBG();
-  g.fillRect(0, 0, W, H);
-  g.restore();
-}
-
+    g.save();
+    g.globalAlpha = 1;
+    g.fillStyle = getBG();
+    g.fillRect(0, 0, W, H);
+    g.restore();
+  }
 
   /**
    * Start emitting lines / prompt activity.
@@ -410,104 +406,104 @@ function clear(ctx) {
   }
 
   /**
- * Render one frame with operator prompt + stream.
- * @param {VNRenderContext} ctx - { ctx2d, w, h, dpr, elapsed, paused, speed }.
- * @returns {void}
- */
-function frame(ctx) {
-  const g = ctx.ctx2d;
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
+   * Render one frame with operator prompt + stream.
+   * @param {VNRenderContext} ctx - { ctx2d, w, h, dpr, elapsed, paused, speed }.
+   * @returns {void}
+   */
+  function frame(ctx) {
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
 
-  // per-mode speed mapping
-  applySpeed(ctx.speed);
+    // per-mode speed mapping
+    applySpeed(ctx.speed);
 
-  // soft fade toward the vibe background (no transform changes here)
-  g.save();
-  g.globalCompositeOperation = 'source-over';
-  g.globalAlpha = 0.18;   // trail strength
-  g.fillStyle = getBG();  // vibe-aware background
-  g.fillRect(0, 0, W, H);
-  g.restore();
+    // soft fade toward the vibe background (no transform changes here)
+    g.save();
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 0.18; // trail strength
+    g.fillStyle = getBG(); // vibe-aware background
+    g.fillRect(0, 0, W, H);
+    g.restore();
 
-  const dt = ctx.elapsed || 16;
+    const dt = ctx.elapsed || 16;
 
-  if (running && !ctx.paused) {
-    // operator prompt typing takes priority (so it isn't scrolled away mid-typing)
-    if (promptActive) {
-      stepPrompt(dt);
-    } else {
-      if (partialLine) {
-        typeAccumulator += dt;
-        while (typeAccumulator >= typeSpeedMs && partialLine) {
-          typeAccumulator -= typeSpeedMs;
-          partialIdx++;
-          if (partialIdx >= partialLine.length) {
-            push(partialLine);
-            partialLine = null;
-            partialIdx = 0;
-          }
-        }
+    if (running && !ctx.paused) {
+      // operator prompt typing takes priority (so it isn't scrolled away mid-typing)
+      if (promptActive) {
+        stepPrompt(dt);
       } else {
-        emitAccumulator += dt;
-        promptCooldownAcc += dt;
-
-        while (emitAccumulator >= emitIntervalMs && !partialLine) {
-          emitAccumulator -= emitIntervalMs;
-
-          // burst after a finished command
-          if (burstLeft > 0) {
-            push(makeLine());
-            burstLeft--;
-            continue;
+        if (partialLine) {
+          typeAccumulator += dt;
+          while (typeAccumulator >= typeSpeedMs && partialLine) {
+            typeAccumulator -= typeSpeedMs;
+            partialIdx++;
+            if (partialIdx >= partialLine.length) {
+              push(partialLine);
+              partialLine = null;
+              partialIdx = 0;
+            }
           }
+        } else {
+          emitAccumulator += dt;
+          promptCooldownAcc += dt;
 
-          // maybe start a new operator prompt
-          if (promptCooldownAcc >= promptCooldownMs && Math.random() < promptChancePerEmit) {
-            beginPrompt();
-            break; // switch to prompt typing next frame
-          }
+          while (emitAccumulator >= emitIntervalMs && !partialLine) {
+            emitAccumulator -= emitIntervalMs;
 
-          // else: background line (sometimes typed)
-          if (Math.random() < typingChance) {
-            partialLine = makeLine();
-            partialIdx = 0;
-          } else {
-            push(makeLine());
+            // burst after a finished command
+            if (burstLeft > 0) {
+              push(makeLine());
+              burstLeft--;
+              continue;
+            }
+
+            // maybe start a new operator prompt
+            if (promptCooldownAcc >= promptCooldownMs && Math.random() < promptChancePerEmit) {
+              beginPrompt();
+              break; // switch to prompt typing next frame
+            }
+
+            // else: background line (sometimes typed)
+            if (Math.random() < typingChance) {
+              partialLine = makeLine();
+              partialIdx = 0;
+            } else {
+              push(makeLine());
+            }
           }
         }
       }
+    } else {
+      // paused: keep cursor blinking if a prompt is active
+      if (promptActive) cursorBlinkMs = (cursorBlinkMs + dt) % CURSOR_PERIOD;
     }
-  } else {
-    // paused: keep cursor blinking if a prompt is active
-    if (promptActive) cursorBlinkMs = (cursorBlinkMs + dt) % CURSOR_PERIOD;
-  }
 
-  // draw buffer
-  const lines = buffer.slice(Math.max(0, buffer.length - rows));
-  const fg = getFG();
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-  g.textBaseline = 'top';
-  g.fillStyle = fg;
+    // draw buffer
+    const lines = buffer.slice(Math.max(0, buffer.length - rows));
+    const fg = getFG();
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    g.textBaseline = 'top';
+    g.fillStyle = fg;
 
-  let y = 4;
-  const xPad = 8;
-  for (let i = 0; i < lines.length; i++) {
-    const txt = lines[i];
-    const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
-    g.fillText(out, xPad, y);
-    y += lineH;
-  }
+    let y = 4;
+    const xPad = 8;
+    for (let i = 0; i < lines.length; i++) {
+      const txt = lines[i];
+      const out = txt.length > cols ? txt.slice(0, cols - 1) + '…' : txt;
+      g.fillText(out, xPad, y);
+      y += lineH;
+    }
 
-  // draw prompt at bottom
-  const cursorOn = cursorBlinkMs < 520;
-  if (promptActive) {
-    const typed = promptLine.slice(0, promptIdx);
-    g.fillText(`${PROMPT_PREFIX}${typed}${cursorOn ? '▍' : ' '}`, xPad, y);
-  } else {
-    g.fillText(`${PROMPT_PREFIX}${cursorOn ? '▍' : ' '}`, xPad, y);
+    // draw prompt at bottom
+    const cursorOn = cursorBlinkMs < 520;
+    if (promptActive) {
+      const typed = promptLine.slice(0, promptIdx);
+      g.fillText(`${PROMPT_PREFIX}${typed}${cursorOn ? '▍' : ' '}`, xPad, y);
+    } else {
+      g.fillText(`${PROMPT_PREFIX}${cursorOn ? '▍' : ' '}`, xPad, y);
+    }
   }
-}
 
   return { init, resize, start, stop, frame, clear };
 })();

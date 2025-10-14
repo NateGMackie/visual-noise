@@ -116,52 +116,61 @@ export const matrix = (() => {
    * @returns {void}
    */
   function calc(ctx) {
-  const g = ctx.ctx2d;
-  const W = ctx.w / ctx.dpr;  // CSS px
-  const H = ctx.h / ctx.dpr;  // CSS px
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr; // CSS px
+    const H = ctx.h / ctx.dpr; // CSS px
 
-  // Scale type from CSS size (not device pixels)
-  fontSize = Math.max(12, Math.floor(0.02 * Math.min(W, H)));
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-  g.textBaseline = 'top';
+    // Scale type from CSS size (not device pixels)
+    fontSize = Math.max(12, Math.floor(0.02 * Math.min(W, H)));
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    g.textBaseline = 'top';
 
-  // Cell metrics in CSS px
-  cellW = Math.max(8, Math.ceil(g.measureText('M').width));
-  cellH = Math.max(fontSize, 16);
+    // Cell metrics in CSS px
+    cellW = Math.max(8, Math.ceil(g.measureText('M').width));
+    cellH = Math.max(fontSize, 16);
 
-  // Grid in CSS px
-  cols = Math.ceil(W / cellW);
-  rows = Math.ceil(H / cellH);
+    // Grid in CSS px
+    cols = Math.ceil(W / cellW);
+    rows = Math.ceil(H / cellH);
 
-  // (Re)seed columns
-  columns = Array.from({ length: cols }, () => ({
-    y: Math.floor(-Math.random() * rows),
-    speed: 0.5 + Math.random() * 0.5,
-    trail: 6 + Math.floor(Math.random() * 13),
-    charset: pickCharset(),
-  }));
-}
+    // (Re)seed columns
+    columns = Array.from({ length: cols }, () => ({
+      y: Math.floor(-Math.random() * rows),
+      speed: 0.5 + Math.random() * 0.5,
+      trail: 6 + Math.floor(Math.random() * 13),
+      charset: pickCharset(),
+    }));
+  }
 
   // Seed a single column using current grid metrics
-function seedColumn() {
-  return {
-    y: Math.floor(-Math.random() * rows),
-    speed: 0.5 + Math.random() * 0.5,
-    trail: 6 + Math.floor(Math.random() * 13),
-    charset: pickCharset(),
-  };
-}
+  /**
+   * Create a new column descriptor seeded with randomized state.
+   * @returns {{y:number,speed:number,trail:number,charset:string}} Column state (grid y, fall speed, base trail length, charset).
+   */
+  function seedColumn() {
+    return {
+      y: Math.floor(-Math.random() * rows),
+      speed: 0.5 + Math.random() * 0.5,
+      trail: 6 + Math.floor(Math.random() * 13),
+      charset: pickCharset(),
+    };
+  }
 
-// Reset to identity, then apply DPR exactly once
-function reset2D(g, dpr) {
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.shadowBlur = 0;
-  g.shadowColor = 'rgba(0,0,0,0)';
-}
-
+  // Reset to identity, then apply DPR exactly once
+  /**
+   * Reset 2D canvas defaults and apply a DPR transform.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context to reset.
+   * @param {number} dpr - Device pixel ratio to apply to the transform.
+   * @returns {void}
+   */
+  function reset2D(g, dpr) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+  }
 
   // -----------------------------
   // Lifecycle
@@ -173,66 +182,87 @@ function reset2D(g, dpr) {
    * @returns {void}
    */
   function init(ctx) {
-  const g = ctx.ctx2d;
-  reset2D(g, ctx.dpr);
+    const g = ctx.ctx2d;
+    reset2D(g, ctx.dpr);
 
-  // (Re)build layout/columns in CSS px
-  calc(ctx);
+    // (Re)build layout/columns in CSS px
+    calc(ctx);
 
-  // Paint an opaque black base so Matrix doesn't pick up vibe background
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
-  g.save();
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, W, H);
-  g.restore();
-
-  // Wire bus once
-  if (!wiredBus) {
-    const bus = (window.app && window.app.events) || window.events;
-    if (bus?.on) {
-      // Tail: raw multiplier (slider) OR {index}
-      bus.on('rain.tail', (m) => {
-        if (m && typeof m === 'object' && Number.isFinite(m.index)) {
-          tailIndex = clampStep(m.index);
-        } else {
-          tailIndex = snapToTailIndex(Number(m));
-        }
-        TAIL_MULT = TAIL_STAGES[tailIndex];
-        emitTailStep();
-      });
-
-      // Spawn: authoritative index-only input
-      bus.on('rain.spawn.idx', (payload) => {
-        const idx = payload && typeof payload === 'object' ? payload.index : payload;
-        if (!Number.isFinite(idx)) return;
-        spawnIndex = clampStep(idx);
-        RESPAWN_P = SPAWN_STAGES[spawnIndex];
-        emitSpawnStep();
-      });
-
-      // Vibe changes: don’t clear/reseed; just repaint opaque black with a clean transform
-      bus.on('vibe', () => {
-        reset2D(g, ctx.dpr);
-        const W2 = ctx.w / ctx.dpr;
-        const H2 = ctx.h / ctx.dpr;
-        g.save();
-        g.fillStyle = '#000';
-        g.fillRect(0, 0, W2, H2);
-        g.restore();
-      });
+    // 🔒 Canvas element hardening against vibe CSS (blend/filter)
+    // These style guards ensure Matrix isn't tinted by theme-level effects.
+    const canvas = g.canvas;
+    if (canvas && canvas.style) {
+      canvas.style.mixBlendMode = 'normal'; // disable any screen/multiply etc.
+      canvas.style.filter = 'none'; // disable hue-rotate/sepia/etc.
+      canvas.style.backgroundColor = '#000'; // belt & suspenders: black behind buffer
+      // Create a new stacking context so parent blend modes don't affect us.
+      // Apply to parent if canvas is wrapped; but applying here helps in most setups.
+      canvas.style.isolation = 'isolate';
     }
-    wiredBus = true;
+
+    // Paint an opaque black base so Matrix doesn't pick up vibe background
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+    g.save();
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    g.restore();
+
+    // Wire bus once
+    if (!wiredBus) {
+      const bus = (window.app && window.app.events) || window.events;
+      if (bus?.on) {
+        // Tail: raw multiplier (slider) OR {index}
+        bus.on('rain.tail', (m) => {
+          if (m && typeof m === 'object' && Number.isFinite(m.index)) {
+            tailIndex = clampStep(m.index);
+          } else {
+            tailIndex = snapToTailIndex(Number(m));
+          }
+          TAIL_MULT = TAIL_STAGES[tailIndex];
+          emitTailStep();
+        });
+
+        // Spawn: authoritative index-only input
+        bus.on('rain.spawn.idx', (payload) => {
+          const idx = payload && typeof payload === 'object' ? payload.index : payload;
+          if (!Number.isFinite(idx)) return;
+          spawnIndex = clampStep(idx);
+          RESPAWN_P = SPAWN_STAGES[spawnIndex];
+          emitSpawnStep();
+        });
+
+        // Vibe changes: repaint opaque black with a clean transform
+        bus.on('vibe', () => {
+          reset2D(g, ctx.dpr);
+          const W2 = ctx.w / ctx.dpr;
+          const H2 = ctx.h / ctx.dpr;
+          g.save();
+          g.fillStyle = '#000';
+          g.fillRect(0, 0, W2, H2);
+          g.restore();
+
+          // Re-assert canvas isolation after vibe flips classes/vars
+          const cv = g.canvas;
+          if (cv && cv.style) {
+            cv.style.mixBlendMode = 'normal';
+            cv.style.filter = 'none';
+            cv.style.backgroundColor = '#000';
+            cv.style.isolation = 'isolate';
+          }
+        });
+      }
+      wiredBus = true;
+    }
+
+    // Ensure staged values are coherent on init
+    TAIL_MULT = TAIL_STAGES[tailIndex];
+    RESPAWN_P = SPAWN_STAGES[spawnIndex];
+
+    // HUD steps on entry
+    emitSpawnStep();
+    emitTailStep();
   }
-
-  // Ensure staged values are coherent on init
-  TAIL_MULT = TAIL_STAGES[tailIndex];
-  RESPAWN_P = SPAWN_STAGES[spawnIndex];
-
-  // HUD steps on entry
-  emitSpawnStep();
-  emitTailStep();
-}
 
   /**
    * Handle DPR/viewport changes by re-running init (rebuilds layout/state).
@@ -273,16 +303,15 @@ function reset2D(g, dpr) {
    * @returns {void}
    */
   function clear(ctx) {
-  const g = ctx.ctx2d;
-  reset2D(g, ctx.dpr);
-  const W = ctx.w / ctx.dpr;
-  const H = ctx.h / ctx.dpr;
-  g.save();
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, W, H);
-  g.restore();
-}
-
+    const g = ctx.ctx2d;
+    reset2D(g, ctx.dpr);
+    const W = ctx.w / ctx.dpr;
+    const H = ctx.h / ctx.dpr;
+    g.save();
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    g.restore();
+  }
 
   // -----------------------------
   // Drawing
@@ -321,83 +350,85 @@ function reset2D(g, dpr) {
 
   /**
    * Render one frame of Matrix rain and advance stream positions.
-   * @param {RenderCtx} ctx - Render context including speed/paused flags.
+   * Ensures the canvas stays visually isolated and opaque black.
+   * @param {RenderCtx} ctx - Render context with DPR, dimensions, timing, speed, and pause flags.
    * @returns {void}
    */
   function frame(ctx) {
-  const g = ctx.ctx2d;
-  const W = ctx.w / ctx.dpr;  // CSS px
-  const H = ctx.h / ctx.dpr;  // CSS px
+    const g = ctx.ctx2d;
+    const W = ctx.w / ctx.dpr; // CSS px
+    const H = ctx.h / ctx.dpr; // CSS px
 
-  // Soft fade toward black (no transform changes here)
-  g.fillStyle = 'rgba(0,0,0,0.18)';
-  g.fillRect(0, 0, W, H);
+    // 🔁 Hard reset critical paint state every frame (guards against host leakage)
+    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.globalAlpha = 1;
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
 
-  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-  g.textBaseline = 'top';
+    // Soft fade toward black (keeps trails)
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(0, 0, W, H);
 
-  // Ensure columns array matches current col count and has valid objects
-  if (columns.length !== cols) {
-    const next = new Array(cols);
-    const n = Math.min(cols, columns.length);
-    for (let i = 0; i < n; i++) {
-      next[i] = columns[i] || seedColumn();
+    // Keep backing visually black even if alpha is meddled with by host
+    g.save();
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = '#000';
+    g.fillRect(-1, -1, W + 2, H + 2); // slight overfill for DPR edges
+    g.restore();
+
+    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    g.textBaseline = 'top';
+
+    // Ensure columns array matches current col count and has valid objects
+    if (columns.length !== cols) {
+      const next = new Array(cols);
+      const n = Math.min(cols, columns.length);
+      for (let i = 0; i < n; i++) next[i] = columns[i] || seedColumn();
+      for (let i = n; i < cols; i++) next[i] = seedColumn();
+      columns = next;
+    } else {
+      for (let i = 0; i < cols; i++) if (!columns[i]) columns[i] = seedColumn();
     }
-    for (let i = n; i < cols; i++) next[i] = seedColumn();
-    columns = next;
-  } else {
+
+    const mult = clampMul(ctx.speed);
+    const base = 0.3;
+
     for (let i = 0; i < cols; i++) {
-      if (!columns[i]) columns[i] = seedColumn();
-    }
-  }
+      let col = columns[i] || (columns[i] = seedColumn());
+      const px = i * cellW;
 
-  const mult = clampMul(ctx.speed);
-  const base = 0.3;
+      if (running && !ctx.paused) col.y += col.speed * base * mult;
 
-  for (let i = 0; i < cols; i++) {
-    let col = columns[i];
-    if (!col) {
-      col = columns[i] = seedColumn(); // final guard
-    }
+      const headGridY = Math.floor(col.y);
 
-    const px = i * cellW;
+      // head
+      {
+        const set = col.charset || pickCharset();
+        const ch = set[(Math.random() * set.length) | 0];
+        const y = headGridY * cellH;
+        if (y > -cellH && y < H + cellH) drawGlyph(g, ch, px, y, { isHead: true });
+      }
 
-    if (running && !ctx.paused) {
-      col.y += col.speed * base * mult;
-    }
+      // trail using staged multiplier
+      const baseTrail = col.trail;
+      const trailLen = Math.max(1, Math.min(40, Math.round(baseTrail * TAIL_MULT)));
+      for (let t = 1; t <= trailLen; t++) {
+        const gy = headGridY - t;
+        const y = gy * cellH;
+        if (y < -cellH) break;
+        if (y > H) continue;
+        const set = col.charset || pickCharset();
+        const ch = set[(Math.random() * set.length) | 0];
+        const alpha = 1 - t / (trailLen + 1);
+        drawGlyph(g, ch, px, y, { isHead: false, alpha });
+      }
 
-    const headGridY = Math.floor(col.y);
-
-    // head
-    {
-      const set = col.charset || pickCharset();
-      const ch = set[(Math.random() * set.length) | 0];
-      const y = headGridY * cellH;
-      if (y > -cellH && y < H + cellH) {
-        drawGlyph(g, ch, px, y, { isHead: true });
+      if (running && !ctx.paused && headGridY * cellH > H && Math.random() < RESPAWN_P) {
+        columns[i] = seedColumn();
       }
     }
-
-    // trail using staged multiplier
-    const baseTrail = col.trail;
-    const trailLen = Math.max(1, Math.min(40, Math.round(baseTrail * TAIL_MULT)));
-    for (let t = 1; t <= trailLen; t++) {
-      const gy = headGridY - t;
-      const y = gy * cellH;
-      if (y < -cellH) break;
-      if (y > H) continue;
-      const set = col.charset || pickCharset();
-      const ch = set[(Math.random() * set.length) | 0];
-      const alpha = 1 - t / (trailLen + 1);
-      drawGlyph(g, ch, px, y, { isHead: false, alpha });
-    }
-
-    // recycle past bottom with staged probability
-    if (running && !ctx.paused && headGridY * cellH > H && Math.random() < RESPAWN_P) {
-      columns[i] = seedColumn();
-    }
   }
-}
 
   // -----------------------------
   // Hotkeys: Shift+Arrows (with stopPropagation)

@@ -13,8 +13,34 @@
  *   - init(ctx), resize(ctx), start(), stop(), frame(ctx), clear(ctx)
  */
 
+/**
+ * Treat browser DOM types as opaque so jsdoc/no-undefined-types won't complain.
+ * @typedef {*} CanvasRenderingContext2D
+ * @typedef {*} HTMLCanvasElement
+ */
+
+/**
+ * Render context shape used by the host engine.
+ * @typedef {object} VNRenderContext
+ * @property {HTMLCanvasElement} [canvas] - Target canvas (optional; some hosts pass only sizes).
+ * @property {CanvasRenderingContext2D} ctx2d - 2D context (DPR transform applied by this mode).
+ * @property {number} dpr - Device pixel ratio used to normalize CSS px.
+ * @property {number} w - Canvas width in device pixels.
+ * @property {number} h - Canvas height in device pixels.
+ * @property {number} [fontSize] - Preferred font size in CSS px for grid metrics.
+ * @property {number} [elapsed] - Milliseconds since last frame.
+ * @property {boolean} [paused] - Global pause flag.
+ * @property {number} [speed] - Global speed multiplier (~0.4–1.6).
+ */
+
 export const rain_bsd = (() => {
   // --- helpers --------------------------------------------------------------
+  /**
+   * Read a CSS variable with a fallback.
+   * @param {string} name - CSS custom property name, e.g. "--fg".
+   * @param {string} fallback - Value to use if the variable is unset.
+   * @returns {string} Resolved value (trimmed).
+   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
@@ -31,8 +57,9 @@ export const rain_bsd = (() => {
 
   /**
    * Reset to identity, then apply DPR exactly once. Also restores sane defaults.
-   * @param {CanvasRenderingContext2D} g
-   * @param {number} dpr
+   * @param {CanvasRenderingContext2D} g - 2D drawing context to reset.
+   * @param {number} dpr - Device pixel ratio to apply to the context transform.
+   * @returns {void}
    */
   function reset2D(g, dpr) {
     g.setTransform(1, 0, 0, 1, 0, 0);
@@ -45,9 +72,9 @@ export const rain_bsd = (() => {
 
   /**
    * Compute fixed-width character metrics for the grid.
-   * @param {CanvasRenderingContext2D} g
+   * @param {CanvasRenderingContext2D} g - 2D context used for text measurement.
    * @param {number} desiredPx - Desired font pixel size.
-   * @returns {{charW:number,charH:number,fontPx:number}}
+   * @returns {{charW:number,charH:number,fontPx:number}} Character width/height and resolved font size.
    */
   function metrics(g, desiredPx) {
     const fontPx = Math.max(10, Math.floor(desiredPx || 18));
@@ -62,11 +89,30 @@ export const rain_bsd = (() => {
     };
   }
 
-  /** Draw a single character at grid coordinates. */
+  /**
+   * Draw a single character at grid coordinates.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {string} ch - Single character to draw.
+   * @param {number} x - Grid column index.
+   * @param {number} y - Grid row index.
+   * @param {number} cw - Character cell width in CSS px.
+   * @param {number} chH - Character cell height in CSS px.
+   * @returns {void}
+   */
   function drawChar(g, ch, x, y, cw, chH) {
     g.fillText(ch, x * cw, y * chH);
   }
-  /** Draw a short string at grid coordinates. */
+
+  /**
+   * Draw a short string at grid coordinates.
+   * @param {CanvasRenderingContext2D} g - 2D drawing context.
+   * @param {string} str - String to draw.
+   * @param {number} x - Grid column index of the first character.
+   * @param {number} y - Grid row index.
+   * @param {number} cw - Character cell width in CSS px.
+   * @param {number} chH - Character cell height in CSS px.
+   * @returns {void}
+   */
   function drawStr(g, str, x, y, cw, chH) {
     for (let i = 0; i < str.length; i++) g.fillText(str[i], (x + i) * cw, y * chH);
   }
@@ -78,11 +124,15 @@ export const rain_bsd = (() => {
   let canvas = null;
 
   let dpr = 1;
-  let cols = 80, rows = 24;
-  let charW = 10, charH = 18, fontPx = 18;
+  let cols = 80,
+    rows = 24;
+  let charW = 10,
+    charH = 18,
+    fontPx = 18;
 
   // palette (reads from CSS variables)
-  let fg = '#2aa3ff', bg = '#000000';
+  let fg = '#2aa3ff',
+    bg = '#000000';
 
   // Splash entries act like the original's xpos/ypos arrays (max ~5 at once)
   /** @type {{x:number,y:number,stage:number}[]} */
@@ -94,6 +144,10 @@ export const rain_bsd = (() => {
   let running = false;
 
   // --- palette refresh (fix for vibe changes) ------------------------------
+  /**
+   * Refresh the foreground/background colors from CSS variables.
+   * @returns {void}
+   */
   function updatePaletteFromCss() {
     const newFg = readVar('--fg', readVar('--accent', '#2aa3ff'));
     const newBg = readVar('--bg', '#000');
@@ -104,7 +158,8 @@ export const rain_bsd = (() => {
   // --- lifecycle -----------------------------------------------------------
   /**
    * Initialize canvas metrics, palette, and seed a few splashes.
-   * @param {*} ctx - Render context ({ canvas, ctx2d, dpr, w, h, fontSize }).
+   * @param {VNRenderContext} ctx - Render context ({ canvas, ctx2d, dpr, w, h, fontSize }).
+   * @returns {void}
    */
   function init(ctx) {
     canvas = ctx.canvas || canvas;
@@ -144,7 +199,8 @@ export const rain_bsd = (() => {
 
   /**
    * Handle canvas resize/orientation changes.
-   * @param {*} ctx - Render context ({ dpr, w, h, fontSize }).
+   * @param {VNRenderContext} ctx - Render context ({ dpr, w, h, fontSize }).
+   * @returns {void}
    */
   function resize(ctx) {
     if (!g) return;
@@ -168,12 +224,26 @@ export const rain_bsd = (() => {
     g.fillRect(0, 0, W, H);
   }
 
-  function start() { running = true; }
-  function stop()  { running = false; }
+  /**
+   * Begin advancing splash stages.
+   * @returns {void}
+   */
+  function start() {
+    running = true;
+  }
+
+  /**
+   * Stop advancing splash stages.
+   * @returns {void}
+   */
+  function stop() {
+    running = false;
+  }
 
   /**
    * Clear all splashes and the canvas.
-   * @param {*} ctx - Render context.
+   * @param {VNRenderContext} ctx - Render context used to clear with vibe background.
+   * @returns {void}
    */
   function clear(ctx) {
     entries.length = 0;
@@ -190,7 +260,8 @@ export const rain_bsd = (() => {
   /**
    * Render one frame: advance splash stages on a fixed cadence and draw the grid.
    * Speed is applied as a global multiplier (≈0.4–1.6) to the step interval.
-   * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
+   * @param {VNRenderContext} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
+   * @returns {void}
    */
   function frame(ctx) {
     if (!g) return;
@@ -229,23 +300,39 @@ export const rain_bsd = (() => {
   }
 
   // --- internals -----------------------------------------------------------
-  /** Pick a random interior grid cell (margin avoids ring clipping). */
+  /**
+   * Pick a random interior grid cell (margin avoids ring clipping).
+   * @returns {{x:number,y:number}} A safe interior coordinate.
+   */
   function randomInnerCell() {
     // Leave a 2-char margin so the big ring never clips
-    const left = 2, right = cols - 3;
-    const top = 2, bottom = rows - 3;
+    const left = 2,
+      right = cols - 3;
+    const top = 2,
+      bottom = rows - 3;
     return {
       x: rndInt(Math.random, left, Math.max(left, right)),
       y: rndInt(Math.random, top, Math.max(top, bottom)),
     };
   }
 
-  /** True if (x,y) lies inside the grid. */
+  /**
+   * True if (x,y) lies inside the grid.
+   * @param {number} x - Grid column index.
+   * @param {number} y - Grid row index.
+   * @returns {boolean} Whether the cell is within bounds.
+   */
   function inBounds(x, y) {
     return x >= 0 && x < cols && y >= 0 && y < rows;
   }
 
-  /** Draw a ring stage at (x,y). */
+  /**
+   * Draw a ring stage at (x,y).
+   * @param {number} x - Grid column index.
+   * @param {number} y - Grid row index.
+   * @param {number} stage - Stage index 0..4 (dot, small ring, big ring, etc.).
+   * @returns {void}
+   */
   function drawStage(x, y, stage) {
     const put = (cx, cy, s) => {
       if (!inBounds(cx, cy)) return;
@@ -254,9 +341,15 @@ export const rain_bsd = (() => {
     };
 
     switch (stage) {
-      case 0: put(x, y, '.'); break;
-      case 1: put(x, y, 'o'); break;
-      case 2: put(x, y, 'O'); break;
+      case 0:
+        put(x, y, '.');
+        break;
+      case 1:
+        put(x, y, 'o');
+        break;
+      case 2:
+        put(x, y, 'O');
+        break;
       case 3: // mini cross
         put(x, y - 1, '-');
         put(x - 1, y, '|.|');
@@ -272,7 +365,10 @@ export const rain_bsd = (() => {
     }
   }
 
-  /** Draw all active splash entries using the current foreground color. */
+  /**
+   * Draw all active splash entries using the current foreground color.
+   * @returns {void}
+   */
   function drawAllEntries() {
     g.fillStyle = fg;
     for (let i = 0; i < entries.length; i++) {
@@ -281,7 +377,10 @@ export const rain_bsd = (() => {
     }
   }
 
-  /** Age existing entries, spawn a new dot, and cap concurrency. */
+  /**
+   * Age existing entries, spawn a new dot, and cap concurrency.
+   * @returns {void}
+   */
   function tickOnce() {
     // Age existing
     for (const e of entries) e.stage += 1;

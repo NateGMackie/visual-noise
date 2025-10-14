@@ -20,6 +20,13 @@
   --scanline-light: #002016; /* subtle light stripe for classic vibe */
 }
 
+/* Force scanlines to grayscale (no vibe tint) when present */
+.scanlines-neutral {
+  /* Dark = neutral black-ish line, Light = neutral white-ish highlight */
+  --scanline-dark: rgba(0, 0, 0, 0.9);
+  --scanline-light: rgba(255, 255, 255, 0.22);
+}
+
 html,
 body {
   margin: 0;

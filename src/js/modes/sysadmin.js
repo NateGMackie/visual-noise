@@ -4,20 +4,23 @@ import { randInt } from '../lib/index.js';
 
 /**
  * Treat the browser 2D context as an opaque type for JSDoc linting.
+ * (Avoids jsdoc/no-undefined-types without changing runtime.)
  * @typedef {*} CanvasRenderingContext2D
  */
+
 /**
  * Render context passed to mode functions each frame.
- * NOTE: The engine supplies w/h in DEVICE pixels; we normalize to CSS px with / dpr,
- * matching the crypto mode’s approach.
+ * NOTE: The engine supplies `w`/`h` in **device pixels** and a `dpr` (device pixel ratio).
+ * This mode converts to CSS px via `/ dpr` where needed and applies a DPR transform
+ * to the 2D context once during init, mirroring the crypto mode.
  * @typedef {object} VNRenderContext
- * @property {CanvasRenderingContext2D} ctx2d
- * @property {number} w          // device pixels
- * @property {number} h          // device pixels
- * @property {number} dpr        // devicePixelRatio used for transforms
- * @property {number} elapsed
- * @property {boolean} paused
- * @property {number} speed
+ * @property {CanvasRenderingContext2D} ctx2d - 2D drawing context (DPR transform is applied in `init`).
+ * @property {number} w - Canvas width in device pixels.
+ * @property {number} h - Canvas height in device pixels.
+ * @property {number} dpr - Device pixel ratio used for transforms and CSS px normalization.
+ * @property {number} elapsed - Time since the last frame in milliseconds.
+ * @property {boolean} paused - Global paused flag; when true, emission is suspended.
+ * @property {number} speed - Global speed multiplier (≈ 0.4–1.6) affecting line emission cadence.
  */
 
 /**
@@ -31,7 +34,7 @@ export const sysadmin = (() => {
   let cols = 80;
   let rows = 40;
 
-  /** ring buffer of recent lines */
+  /** Ring buffer of recent lines. */
   let buffer = [];
   let maxLines = 200;
 
@@ -40,29 +43,54 @@ export const sysadmin = (() => {
   let emitIntervalMs = 140;
 
   // ------- theming -------
+  /**
+   * Read a CSS custom property with a fallback.
+   * @param {string} name - CSS variable name (e.g., "--bg").
+   * @param {string} fallback - Fallback value if the variable is not set.
+   * @returns {string} Resolved value (trimmed).
+   */
   const readVar = (name, fallback) =>
     window.getComputedStyle(document.documentElement).getPropertyValue(name)?.trim() || fallback;
 
+  /** @returns {string} Background color derived from the current vibe. */
   const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
+
+  /** @returns {string} Foreground color derived from the current vibe. */
   const getFG = () => (readVar('--fg', '#03ffaf') || '#03ffaf').trim();
 
   // ------- line generators -------
   const barFill = '█';
   const barEmpty = '·';
 
+  /**
+   * Build a fixed-width bar using filled/empty glyphs.
+   * @param {number} pct - Percentage 0–100 used for filled portion.
+   * @param {number} [width] - Total bar width in glyphs.
+   * @returns {string} A textual bar (e.g., "█████············").
+   */
   const makeBar = (pct, width = 20) => {
     const p = Math.max(0, Math.min(100, pct));
     const filled = Math.round((p / 100) * width);
     return barFill.repeat(filled) + barEmpty.repeat(width - filled);
   };
 
+  /** @returns {string} Current time HH:MM:SS. */
   const timeStamp = () => new Date().toTimeString().slice(0, 8);
 
+  /**
+   * Push a new line into the ring buffer.
+   * @param {string} l - The line to append.
+   * @returns {void}
+   */
   const push = (l) => {
     buffer.push(l);
     if (buffer.length > maxLines) buffer.splice(0, buffer.length - maxLines);
   };
 
+  /**
+   * Create a new synthetic sysadmin status line.
+   * @returns {string} A single log-like status line.
+   */
   function makeLine() {
     const r = Math.random();
     if (r < 0.2) {
@@ -103,7 +131,10 @@ export const sysadmin = (() => {
 
   // ------- lifecycle -------
   /**
-   * Initialize DPR-safe canvas defaults and sizing (mirror crypto).
+   * Initialize DPR-safe canvas defaults and sizing (mirrors crypto).
+   * Applies the DPR transform once and computes a monospace grid from CSS px.
+   * @param {VNRenderContext} ctx - Render context from the host engine.
+   * @returns {void}
    */
   function init(ctx) {
     const g = ctx.ctx2d;
@@ -138,18 +169,36 @@ export const sysadmin = (() => {
     g.restore();
   }
 
+  /**
+   * Handle canvas resizes by re-running init with the new context.
+   * @param {VNRenderContext} ctx - Render context with updated dimensions/DPR.
+   * @returns {void}
+   */
   function resize(ctx) {
     init(ctx);
   }
 
+  /**
+   * Begin emitting lines each frame.
+   * @returns {void}
+   */
   function start() {
     running = true;
   }
 
+  /**
+   * Stop emitting lines.
+   * @returns {void}
+   */
   function stop() {
     running = false;
   }
 
+  /**
+   * Clear the canvas and reset the line buffer.
+   * @param {VNRenderContext} ctx - Render context used to clear with vibe background.
+   * @returns {void}
+   */
   function clear(ctx) {
     buffer = [];
     const g = ctx.ctx2d;
@@ -169,6 +218,11 @@ export const sysadmin = (() => {
   }
 
   // ------- speed mapping -------
+  /**
+   * Apply a global speed multiplier, mapping to an emission cadence.
+   * @param {number} mult - Speed multiplier (clamped ≈ 0.4–1.6). Higher is faster.
+   * @returns {void}
+   */
   function applySpeed(mult) {
     const m = Math.max(0.4, Math.min(1.6, Number(mult) || 1));
     const midEmit = 140; // sysadmin feels a tad quicker than crypto
@@ -176,6 +230,11 @@ export const sysadmin = (() => {
   }
 
   // ------- frame -------
+  /**
+   * Per-frame render: fade trail to background, emit lines on cadence, draw buffer.
+   * @param {VNRenderContext} ctx - Render context with timing and global flags.
+   * @returns {void}
+   */
   function frame(ctx) {
     const g = ctx.ctx2d;
     const W = ctx.w / ctx.dpr;
