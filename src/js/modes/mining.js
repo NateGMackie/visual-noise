@@ -255,12 +255,16 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
    * @returns {void}
    */
   function reset2D(g, dpr) {
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.shadowBlur = 0;
-    g.shadowColor = 'rgba(0,0,0,0)';
-  }
+  // Reset to identity, then apply DPR exactly once
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.shadowBlur = 0;
+  g.shadowColor = 'rgba(0,0,0,0)';
+}
+
 
   // ——— Mode API ———
 
@@ -270,30 +274,42 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
    * @returns {void}
    */
   function init(ctx) {
-    const g = ctx.ctx2d;
-    reset2D(g, ctx.dpr);
+  const g = ctx.ctx2d;
+  reset2D(g, ctx.dpr);
 
-    fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
-    lineH = Math.floor(fontSize * 1.15);
-    rows = Math.floor(ctx.h / ctx.dpr / lineH);
-    cols = Math.floor(ctx.w / ctx.dpr / (fontSize * 0.62));
-    buffer = [];
-    maxLines = rows * 5;
+  // Use CSS pixels for all layout math
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
 
-    emitAccumulator = 0;
-    typeAccumulator = 0;
-    partialLine = null;
-    partialIdx = 0;
+  fontSize = Math.max(12, Math.floor(0.018 * Math.min(W, H)));
+  lineH = Math.floor(fontSize * 1.15);
+  rows = Math.floor(H / lineH);
+  cols = Math.floor(W / (fontSize * 0.62));
 
-    // prompt state
-    promptActive = false;
-    promptLine = '';
-    promptIdx = 0;
-    promptAccumulator = 0;
-    cursorBlinkMs = 0;
-    promptCooldownAcc = promptCooldownMs; // allow prompt immediately
-    burstLeft = 0;
-  }
+  buffer = [];
+  maxLines = rows * 5;
+
+  emitAccumulator = 0;
+  typeAccumulator = 0;
+  partialLine = null;
+  partialIdx = 0;
+
+  // prompt state
+  promptActive = false;
+  promptLine = '';
+  promptIdx = 0;
+  promptAccumulator = 0;
+  cursorBlinkMs = 0;
+  promptCooldownAcc = promptCooldownMs; // allow prompt immediately
+  burstLeft = 0;
+
+  // Paint base background to current vibe bg
+  g.save();
+  g.fillStyle = getBG();
+  g.fillRect(0, 0, W, H);
+  g.restore();
+}
+
 
   /**
    * Recompute metrics on resize/orientation.
@@ -312,10 +328,19 @@ const getBG = () => (readVar('--bg', '#000000') || '#000000').trim();
 function clear(ctx) {
   buffer = [];
   const g = ctx.ctx2d;
+
   reset2D(g, ctx.dpr);
-  g.fillStyle = getBG();              // fill to current vibe bg
-  g.fillRect(0, 0, ctx.w, ctx.h);
+
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
+
+  g.save();
+  g.globalAlpha = 1;
+  g.fillStyle = getBG();
+  g.fillRect(0, 0, W, H);
+  g.restore();
 }
+
 
   /**
    * Start emitting lines / prompt activity.
@@ -397,12 +422,11 @@ function frame(ctx) {
   // per-mode speed mapping
   applySpeed(ctx.speed);
 
-  // soft fade toward the vibe background instead of hard-coded black
+  // soft fade toward the vibe background (no transform changes here)
   g.save();
-  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
   g.globalCompositeOperation = 'source-over';
-  g.globalAlpha = 0.18;               // trail strength
-  g.fillStyle = getBG();              // ← vibe-aware background
+  g.globalAlpha = 0.18;   // trail strength
+  g.fillStyle = getBG();  // vibe-aware background
   g.fillRect(0, 0, W, H);
   g.restore();
 
@@ -413,7 +437,6 @@ function frame(ctx) {
     if (promptActive) {
       stepPrompt(dt);
     } else {
-      // when no prompt, we can type a background line or emit normal lines
       if (partialLine) {
         typeAccumulator += dt;
         while (typeAccumulator >= typeSpeedMs && partialLine) {
@@ -432,20 +455,20 @@ function frame(ctx) {
         while (emitAccumulator >= emitIntervalMs && !partialLine) {
           emitAccumulator -= emitIntervalMs;
 
-          // 1) if a post-command burst is pending, emit those first
+          // burst after a finished command
           if (burstLeft > 0) {
             push(makeLine());
             burstLeft--;
             continue;
           }
 
-          // 2) maybe start a new operator prompt (not too frequently)
+          // maybe start a new operator prompt
           if (promptCooldownAcc >= promptCooldownMs && Math.random() < promptChancePerEmit) {
             beginPrompt();
-            break; // switch to prompt typing loop next frame
+            break; // switch to prompt typing next frame
           }
 
-          // 3) else: background line (sometimes typed)
+          // else: background line (sometimes typed)
           if (Math.random() < typingChance) {
             partialLine = makeLine();
             partialIdx = 0;
@@ -476,18 +499,15 @@ function frame(ctx) {
     y += lineH;
   }
 
-  // draw prompt on its own line at bottom of the buffer view
+  // draw prompt at bottom
   const cursorOn = cursorBlinkMs < 520;
   if (promptActive) {
     const typed = promptLine.slice(0, promptIdx);
-    const promptText = `${PROMPT_PREFIX}${typed}${cursorOn ? '▍' : ' '}`;
-    g.fillText(promptText, xPad, y);
+    g.fillText(`${PROMPT_PREFIX}${typed}${cursorOn ? '▍' : ' '}`, xPad, y);
   } else {
-    const idleText = `${PROMPT_PREFIX}${cursorOn ? '▍' : ' '}`;
-    g.fillText(idleText, xPad, y);
+    g.fillText(`${PROMPT_PREFIX}${cursorOn ? '▍' : ' '}`, xPad, y);
   }
 }
-
 
   return { init, resize, start, stop, frame, clear };
 })();

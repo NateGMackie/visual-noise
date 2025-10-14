@@ -116,25 +116,31 @@ export const matrix = (() => {
    * @returns {void}
    */
   function calc(ctx) {
-    fontSize = Math.max(12, Math.floor(0.02 * Math.min(ctx.w, ctx.h)));
-    const g = ctx.ctx2d;
-    g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    g.textBaseline = 'top';
-    cellW = Math.max(8, Math.ceil(g.measureText('M').width));
-    cellH = Math.max(fontSize, 16);
+  const g = ctx.ctx2d;
+  const W = ctx.w / ctx.dpr;  // CSS px
+  const H = ctx.h / ctx.dpr;  // CSS px
 
-    const W = Math.floor(ctx.w / ctx.dpr);
-    const H = Math.floor(ctx.h / ctx.dpr);
-    cols = Math.ceil(W / cellW);
-    rows = Math.ceil(H / cellH);
+  // Scale type from CSS size (not device pixels)
+  fontSize = Math.max(12, Math.floor(0.02 * Math.min(W, H)));
+  g.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  g.textBaseline = 'top';
 
-    columns = Array.from({ length: cols }, () => ({
-      y: Math.floor(-Math.random() * rows),
-      speed: 0.5 + Math.random() * 0.5,
-      trail: 6 + Math.floor(Math.random() * 13),
-      charset: pickCharset(),
-    }));
-  }
+  // Cell metrics in CSS px
+  cellW = Math.max(8, Math.ceil(g.measureText('M').width));
+  cellH = Math.max(fontSize, 16);
+
+  // Grid in CSS px
+  cols = Math.ceil(W / cellW);
+  rows = Math.ceil(H / cellH);
+
+  // (Re)seed columns
+  columns = Array.from({ length: cols }, () => ({
+    y: Math.floor(-Math.random() * rows),
+    speed: 0.5 + Math.random() * 0.5,
+    trail: 6 + Math.floor(Math.random() * 13),
+    charset: pickCharset(),
+  }));
+}
 
   // Seed a single column using current grid metrics
 function seedColumn() {
@@ -145,6 +151,17 @@ function seedColumn() {
     charset: pickCharset(),
   };
 }
+
+// Reset to identity, then apply DPR exactly once
+function reset2D(g, dpr) {
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.shadowBlur = 0;
+  g.shadowColor = 'rgba(0,0,0,0)';
+}
+
 
   // -----------------------------
   // Lifecycle
@@ -157,22 +174,18 @@ function seedColumn() {
    */
   function init(ctx) {
   const g = ctx.ctx2d;
-  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-  g.globalAlpha = 1;
-  g.globalCompositeOperation = 'source-over';
-  g.shadowBlur = 0;
-  g.shadowColor = 'rgba(0,0,0,0)';
+  reset2D(g, ctx.dpr);
 
-  // (Re)build layout/columns
+  // (Re)build layout/columns in CSS px
   calc(ctx);
 
-  // Paint an opaque black base so Matrix doesn't "pick up" vibe background
-  {
-    const W = Math.floor(ctx.w / ctx.dpr);
-    const H = Math.floor(ctx.h / ctx.dpr);
-    g.fillStyle = '#000';
-    g.fillRect(0, 0, W, H);
-  }
+  // Paint an opaque black base so Matrix doesn't pick up vibe background
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
+  g.save();
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, W, H);
+  g.restore();
 
   // Wire bus once
   if (!wiredBus) {
@@ -198,15 +211,15 @@ function seedColumn() {
         emitSpawnStep();
       });
 
-      // Vibe changes: DO NOT clear/reseed; just repaint our own black BG.
+      // Vibe changes: don’t clear/reseed; just repaint opaque black with a clean transform
       bus.on('vibe', () => {
-        const W = Math.floor(ctx.w / ctx.dpr);
-        const H = Math.floor(ctx.h / ctx.dpr);
-        g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-        g.globalCompositeOperation = 'source-over';
-        g.globalAlpha = 1;
+        reset2D(g, ctx.dpr);
+        const W2 = ctx.w / ctx.dpr;
+        const H2 = ctx.h / ctx.dpr;
+        g.save();
         g.fillStyle = '#000';
-        g.fillRect(0, 0, W, H);
+        g.fillRect(0, 0, W2, H2);
+        g.restore();
       });
     }
     wiredBus = true;
@@ -260,15 +273,14 @@ function seedColumn() {
    * @returns {void}
    */
   function clear(ctx) {
-  // Keep column state intact; just repaint an opaque black canvas.
   const g = ctx.ctx2d;
-  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-  g.globalAlpha = 1;
-  const W = Math.floor(ctx.w / ctx.dpr);
-  const H = Math.floor(ctx.h / ctx.dpr);
+  reset2D(g, ctx.dpr);
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
+  g.save();
   g.fillStyle = '#000';
   g.fillRect(0, 0, W, H);
+  g.restore();
 }
 
 
@@ -314,10 +326,10 @@ function seedColumn() {
    */
   function frame(ctx) {
   const g = ctx.ctx2d;
-  const W = Math.floor(ctx.w / ctx.dpr);
-  const H = Math.floor(ctx.h / ctx.dpr);
+  const W = ctx.w / ctx.dpr;  // CSS px
+  const H = ctx.h / ctx.dpr;  // CSS px
 
-  // Soft fade toward black (not vibe)
+  // Soft fade toward black (no transform changes here)
   g.fillStyle = 'rgba(0,0,0,0.18)';
   g.fillRect(0, 0, W, H);
 

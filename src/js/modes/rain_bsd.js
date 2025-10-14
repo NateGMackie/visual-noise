@@ -1,4 +1,3 @@
-// src/js/modes/rain_bsd.js
 /* eslint-env browser */
 
 /**
@@ -13,10 +12,6 @@
  * Exports:
  *   - init(ctx), resize(ctx), start(), stop(), frame(ctx), clear(ctx)
  */
-
-// BSD Rain (curses-style) — splash rings like the classic
-// Stages per splash:
-// 0: '.'    1: 'o'    2: 'O'    3: mini-cross    4: big ring
 
 export const rain_bsd = (() => {
   // --- helpers --------------------------------------------------------------
@@ -35,59 +30,59 @@ export const rain_bsd = (() => {
   }
 
   /**
-   * Compute fixed-width character metrics for the grid.
-   * @param {*} g - 2D drawing context.
-   * @param {number} desiredPx - Desired font pixel size.
-   * @returns {{charW:number,charH:number}} Character width/height in CSS pixels.
+   * Reset to identity, then apply DPR exactly once. Also restores sane defaults.
+   * @param {CanvasRenderingContext2D} g
+   * @param {number} dpr
    */
-  function metrics(g, desiredPx) {
-    const px = Math.max(10, Math.floor(desiredPx || 18));
-    g.font = `${px}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
-    g.textBaseline = 'top';
-    // Keep char width generous enough that multi-char glyphs align
-    const w = Math.ceil(g.measureText('M').width);
-    const h = Math.ceil(px * 1.25);
-    return { charW: Math.max(6, w), charH: Math.max(px, h) };
+  function reset2D(g, dpr) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
   }
 
   /**
-   * Draw a single character at grid coordinates.
-   * @param {*} g - 2D drawing context.
-   * @param {string} ch - Single character to draw.
-   * @param {number} x - Column index.
-   * @param {number} y - Row index.
-   * @param {number} cw - Character width (CSS px).
-   * @param {number} chH - Character height (CSS px).
-   * @returns {void}
+   * Compute fixed-width character metrics for the grid.
+   * @param {CanvasRenderingContext2D} g
+   * @param {number} desiredPx - Desired font pixel size.
+   * @returns {{charW:number,charH:number,fontPx:number}}
    */
+  function metrics(g, desiredPx) {
+    const fontPx = Math.max(10, Math.floor(desiredPx || 18));
+    g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+    g.textBaseline = 'top';
+    const w = Math.ceil(g.measureText('M').width);
+    const h = Math.ceil(fontPx * 1.25);
+    return {
+      charW: Math.max(6, w),
+      charH: Math.max(fontPx, h),
+      fontPx,
+    };
+  }
+
+  /** Draw a single character at grid coordinates. */
   function drawChar(g, ch, x, y, cw, chH) {
     g.fillText(ch, x * cw, y * chH);
   }
-  /**
-   * Draw a short string at grid coordinates.
-   * @param {*} g - 2D drawing context.
-   * @param {string} str - String to draw (few chars).
-   * @param {number} x - Column index.
-   * @param {number} y - Row index.
-   * @param {number} cw - Character width (CSS px).
-   * @param {number} chH - Character height (CSS px).
-   * @returns {void}
-   */
+  /** Draw a short string at grid coordinates. */
   function drawStr(g, str, x, y, cw, chH) {
     for (let i = 0; i < str.length; i++) g.fillText(str[i], (x + i) * cw, y * chH);
   }
 
   // --- state ---------------------------------------------------------------
-  let g, canvas;
+  /** @type {CanvasRenderingContext2D|null} */
+  let g = null;
+  /** @type {HTMLCanvasElement|null} */
+  let canvas = null;
+
   let dpr = 1;
-  let cols = 80,
-    rows = 24;
-  let charW = 10,
-    charH = 18;
+  let cols = 80, rows = 24;
+  let charW = 10, charH = 18, fontPx = 18;
 
   // palette (reads from CSS variables)
-  let fg = '#2aa3ff',
-    bg = 'black';
+  let fg = '#2aa3ff', bg = '#000000';
 
   // Splash entries act like the original's xpos/ypos arrays (max ~5 at once)
   /** @type {{x:number,y:number,stage:number}[]} */
@@ -99,50 +94,39 @@ export const rain_bsd = (() => {
   let running = false;
 
   // --- palette refresh (fix for vibe changes) ------------------------------
-  /**
-   * Refresh palette from CSS vars; called at init() and each frame().
-   * @returns {void}
-   */
   function updatePaletteFromCss() {
     const newFg = readVar('--fg', readVar('--accent', '#2aa3ff'));
     const newBg = readVar('--bg', '#000');
-
-    if (newFg !== fg || newBg !== bg) {
-      fg = newFg;
-      bg = newBg;
-    }
+    if (newFg) fg = newFg;
+    if (newBg) bg = newBg;
   }
 
   // --- lifecycle -----------------------------------------------------------
   /**
    * Initialize canvas metrics, palette, and seed a few splashes.
    * @param {*} ctx - Render context ({ canvas, ctx2d, dpr, w, h, fontSize }).
-   * @returns {void}
    */
   function init(ctx) {
-    canvas = ctx.canvas;
+    canvas = ctx.canvas || canvas;
     g = ctx.ctx2d;
 
-    // Maintain DPR scale
-    dpr = ctx.dpr || 1;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.shadowBlur = 0;
-    g.shadowColor = 'rgba(0,0,0,0)';
+    // Maintain DPR scale (once here)
+    dpr = ctx.dpr || window.devicePixelRatio || 1;
+    reset2D(g, dpr);
 
-    // Metrics from font
+    // Metrics from font, based on CSS px (W/H = device px / DPR)
+    const W = (ctx.w || canvas?.width || 0) / dpr;
+    const H = (ctx.h || canvas?.height || 0) / dpr;
+
     const m = metrics(g, ctx.fontSize || 18);
     charW = m.charW;
     charH = m.charH;
+    fontPx = m.fontPx;
 
-    // Grid from canvas (device px, but we draw in CSS px after setTransform)
-    const W = (ctx.w || canvas.width) / dpr;
-    const H = (ctx.h || canvas.height) / dpr;
     cols = Math.max(8, Math.floor(W / charW));
     rows = Math.max(6, Math.floor(H / charH));
 
-    // Initial palette read
+    // Initial palette
     updatePaletteFromCss();
 
     // Seed a handful like the original
@@ -152,64 +136,66 @@ export const rain_bsd = (() => {
       entries.push({ x, y, stage: rndInt(Math.random, 0, 4) });
     }
     tickAccMs = 0;
+
+    // Paint background once
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, H);
   }
 
   /**
    * Handle canvas resize/orientation changes.
    * @param {*} ctx - Render context ({ dpr, w, h, fontSize }).
-   * @returns {void}
    */
   function resize(ctx) {
     if (!g) return;
-    // Re-apply DPR and recompute cell/grid
-    dpr = ctx.dpr || 1;
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    dpr = ctx.dpr || window.devicePixelRatio || 1;
+    reset2D(g, dpr);
+
+    const W = (ctx.w || canvas?.width || 0) / dpr;
+    const H = (ctx.h || canvas?.height || 0) / dpr;
 
     const m = metrics(g, ctx.fontSize || 18);
     charW = m.charW;
     charH = m.charH;
+    fontPx = m.fontPx;
 
-    const W = (ctx.w || canvas.width) / dpr;
-    const H = (ctx.h || canvas.height) / dpr;
     cols = Math.max(8, Math.floor(W / charW));
     rows = Math.max(6, Math.floor(H / charH));
+
+    // Repaint background after resize to avoid stale pixels at edges
+    g.fillStyle = bg;
+    g.fillRect(0, 0, W, H);
   }
 
-  /**
-   * Begin advancing animation.
-   * @returns {void}
-   */
-  function start() {
-    running = true;
-  }
-  /**
-   * Pause animation.
-   * @returns {void}
-   */
-  function stop() {
-    running = false;
-  }
+  function start() { running = true; }
+  function stop()  { running = false; }
 
   /**
    * Clear all splashes and the canvas.
    * @param {*} ctx - Render context.
-   * @returns {void}
    */
   function clear(ctx) {
     entries.length = 0;
-    if (ctx && ctx.ctx2d) ctx.ctx2d.clearRect(0, 0, ctx.w, ctx.h);
+    if (!ctx || !ctx.ctx2d) return;
+    // Ensure DPR + paint to bg instead of clearRect (respects vibe)
+    reset2D(ctx.ctx2d, ctx.dpr || window.devicePixelRatio || 1);
+    const W = (ctx.w || ctx.canvas?.width || 0) / (ctx.dpr || 1);
+    const H = (ctx.h || ctx.canvas?.height || 0) / (ctx.dpr || 1);
+    updatePaletteFromCss();
+    ctx.ctx2d.fillStyle = bg;
+    ctx.ctx2d.fillRect(0, 0, W, H);
   }
 
   /**
    * Render one frame: advance splash stages on a fixed cadence and draw the grid.
    * Speed is applied as a global multiplier (≈0.4–1.6) to the step interval.
    * @param {*} ctx - Render context ({ ctx2d, w, h, dpr, elapsed, paused, speed }).
-   * @returns {void}
    */
   function frame(ctx) {
     if (!g) return;
 
-    // 🔄 pick up vibe changes live
+    // pick up vibe changes live
     updatePaletteFromCss();
 
     // GLOBAL range 0.4..1.6; align with other modes
@@ -227,48 +213,39 @@ export const rain_bsd = (() => {
       }
     }
 
-    // draw
-    const W = (ctx.w || canvas.width) / dpr;
-    const H = (ctx.h || canvas.height) / dpr;
+    // draw (CSS px dimensions)
+    const W = (ctx.w || canvas?.width || 0) / dpr;
+    const H = (ctx.h || canvas?.height || 0) / dpr;
+
+    // Background
     g.fillStyle = bg;
     g.fillRect(0, 0, W, H);
+
+    // Font (explicit each frame to avoid cross-mode contamination)
+    g.font = `${fontPx}px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`;
+    g.textBaseline = 'top';
+
     drawAllEntries();
   }
 
   // --- internals -----------------------------------------------------------
-  /**
-   * Pick a random interior grid cell (margin avoids ring clipping).
-   * @returns {{x:number,y:number}} Cell coordinates inside safe bounds.
-   */
+  /** Pick a random interior grid cell (margin avoids ring clipping). */
   function randomInnerCell() {
     // Leave a 2-char margin so the big ring never clips
-    const left = 2,
-      right = cols - 3;
-    const top = 2,
-      bottom = rows - 3;
+    const left = 2, right = cols - 3;
+    const top = 2, bottom = rows - 3;
     return {
       x: rndInt(Math.random, left, Math.max(left, right)),
       y: rndInt(Math.random, top, Math.max(top, bottom)),
     };
   }
 
-  /**
-   * Check if (x,y) lies inside the grid.
-   * @param {number} x - Column index.
-   * @param {number} y - Row index.
-   * @returns {boolean} True if within bounds.
-   */
+  /** True if (x,y) lies inside the grid. */
   function inBounds(x, y) {
     return x >= 0 && x < cols && y >= 0 && y < rows;
   }
 
-  /**
-   * Draw a ring stage at (x,y).
-   * @param {number} x - Column index.
-   * @param {number} y - Row index.
-   * @param {number} stage - 0..4 ring stage identifier.
-   * @returns {void}
-   */
+  /** Draw a ring stage at (x,y). */
   function drawStage(x, y, stage) {
     const put = (cx, cy, s) => {
       if (!inBounds(cx, cy)) return;
@@ -277,23 +254,15 @@ export const rain_bsd = (() => {
     };
 
     switch (stage) {
-      case 0:
-        put(x, y, '.');
-        break;
-      case 1:
-        put(x, y, 'o');
-        break;
-      case 2:
-        put(x, y, 'O');
-        break;
-      case 3:
-        // mini cross
+      case 0: put(x, y, '.'); break;
+      case 1: put(x, y, 'o'); break;
+      case 2: put(x, y, 'O'); break;
+      case 3: // mini cross
         put(x, y - 1, '-');
         put(x - 1, y, '|.|');
         put(x, y + 1, '-');
         break;
-      case 4:
-        // big ring (exact layout)
+      case 4: // big ring (exact layout)
         put(x, y - 2, '-');
         put(x - 1, y - 1, '/ \\');
         put(x - 2, y, '| O |');
@@ -303,10 +272,7 @@ export const rain_bsd = (() => {
     }
   }
 
-  /**
-   * Draw all active splash entries using the current foreground color.
-   * @returns {void}
-   */
+  /** Draw all active splash entries using the current foreground color. */
   function drawAllEntries() {
     g.fillStyle = fg;
     for (let i = 0; i < entries.length; i++) {
@@ -315,10 +281,7 @@ export const rain_bsd = (() => {
     }
   }
 
-  /**
-   * Age existing entries, spawn a new dot, and cap concurrency.
-   * @returns {void}
-   */
+  /** Age existing entries, spawn a new dot, and cap concurrency. */
   function tickOnce() {
     // Age existing
     for (const e of entries) e.stage += 1;

@@ -99,30 +99,42 @@ export const crypto = (() => {
    * @returns {void}
    */
   function init(ctx) {
-    const g = ctx.ctx2d;
-    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.shadowBlur = 0;
-    g.shadowColor = 'rgba(0,0,0,0)';
+  const g = ctx.ctx2d;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
 
-    fontSize = Math.max(12, Math.floor(0.018 * Math.min(ctx.w, ctx.h)));
-    lineH = Math.floor(fontSize * 1.15);
-    rows = Math.floor(ctx.h / ctx.dpr / lineH);
-    cols = Math.floor(ctx.w / ctx.dpr / (fontSize * 0.62));
 
-    buffer = [];
-    maxLines = rows * 5;
-    emitAccumulator = 0;
+  // Always reset, then apply DPR transform once
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
 
-    // Fill the base to the vibe background (opaque)
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
-    g.save();
-    g.fillStyle = getBG();
-    g.fillRect(0, 0, W, H);
-    g.restore();
-  }
+  g.globalAlpha = 1;
+  g.globalCompositeOperation = 'source-over';
+  g.shadowBlur = 0;
+  g.shadowColor = 'rgba(0,0,0,0)';
+
+  // Use CSS pixels for all layout math
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
+
+  // Scale type from CSS size (not device pixels)
+  fontSize = Math.max(12, Math.floor(0.018 * Math.min(W, H)));
+  lineH = Math.floor(fontSize * 1.15);
+
+  // Rows/cols computed in CSS pixels to match the scaled CTX
+  rows = Math.floor(H / lineH);
+  cols = Math.floor(W / (fontSize * 0.62));
+
+  buffer = [];
+  maxLines = rows * 5;
+  emitAccumulator = 0;
+
+  // Paint background (CSS pixels)
+  g.save();
+  g.fillStyle = getBG();
+  g.fillRect(0, 0, W, H);
+  g.restore();
+}
 
   /**
    * Recompute metrics on geometry/DPR change.
@@ -148,17 +160,23 @@ export const crypto = (() => {
    * @returns {void}
    */
   function clear(ctx) {
-    buffer = [];
-    const g = ctx.ctx2d;
-    const W = ctx.w / ctx.dpr;
-    const H = ctx.h / ctx.dpr;
-    g.save();
-    g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
-    g.globalAlpha = 1;
-    g.fillStyle = getBG();
-    g.fillRect(0, 0, W, H);
-    g.restore();
-  }
+  buffer = [];
+  const g = ctx.ctx2d;
+
+  // Defensive: reset and reapply DPR transform
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(ctx.dpr, 0, 0, ctx.dpr, 0, 0);
+
+  const W = ctx.w / ctx.dpr;
+  const H = ctx.h / ctx.dpr;
+
+  g.save();
+  g.globalAlpha = 1;
+  g.fillStyle = getBG();
+  g.fillRect(0, 0, W, H);
+  g.restore();
+}
+
 
   // --- speed mapping (Crypto) ---
   /**
