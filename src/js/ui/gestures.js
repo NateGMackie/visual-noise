@@ -4,8 +4,8 @@
 // Mobile swipe gestures mirroring your keyboard logic & clickable HUD.
 //  - Swipe LEFT  -> cycle genre backward  (same as '[')
 //  - Swipe RIGHT -> cycle genre forward   (same as ']')
-//  - Swipe UP    -> cycle vibe            (same as 't')
-//  - Swipe DOWN  -> next style            (same as '.')
+//  - Swipe UP    -> trigger '.' (period)
+//  - Swipe DOWN  -> trigger ';' (semicolon)
 //
 // Pull-to-refresh safe: We only block downward drags when not at the very top.
 // Landscape-friendly thresholds. No imports. Auto-inits on DOMContentLoaded.
@@ -59,7 +59,7 @@ function openControls() {
 
 /**
  * Synthesize a keydown for the global hotkey handler.
- * @param {string} key - Visible key (e.g., '[', ']', 't', ',', '.').
+ * @param {string} key - Visible key (e.g., '[', ']', ',', '.', ';', 't').
  * @param {{shiftKey?:boolean, ctrlKey?:boolean, altKey?:boolean, metaKey?:boolean}} [opts] - Modifier flags.
  * @returns {void}
  */
@@ -186,11 +186,11 @@ function onEnd() {
   } else if (absY > absX && absX <= MAX_OFF_AXIS) {
     // Vertical
     if (dy < 0) {
-      // UP: cycle vibe ('t')
-      synthKey('t');
-    } else {
-      // DOWN: next style ('.')
+      // UP: trigger '.' (period)
       synthKey('.');
+    } else {
+      // DOWN: trigger ';' (semicolon)
+      synthKey(';');
     }
   }
 }
