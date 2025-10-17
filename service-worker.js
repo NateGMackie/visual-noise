@@ -8,7 +8,7 @@
 // - Precache is tolerant: logs missing files, caches what succeeds
 // ---------------------------------------------
 
-const SW_VERSION = 'v62';
+const SW_VERSION = 'v63';
 const RUNTIME_CACHE = `vn-runtime-${SW_VERSION}`;
 const OFFLINE_CACHE = `vn-offline-${SW_VERSION}`;
 const DEBUG = true;

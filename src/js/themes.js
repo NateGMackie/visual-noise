@@ -17,7 +17,7 @@ const THEMES = {
     '--scanline-light': '#1f1200',
   },
   msdos: {
-    '--bg': '#1d1d1dff',
+    '--bg': '#131313ff',
     '--fg': '#C0C0C0',
     '--accent': '#FFFFFF',
     '--scanline-dark': '#151515',

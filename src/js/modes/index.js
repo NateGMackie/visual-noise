@@ -6,6 +6,7 @@ import { crypto } from './crypto.js';
 import { sysadmin } from './sysadmin.js';
 import { coding } from './coding.js';
 import { mining } from './mining.js';
+import { gameplay } from './gameplay.js';
 import { matrix } from './matrix.js';
 import { digitalrain } from './digitalrain.js';
 import { rain_bsd } from './rain_bsd.js';
@@ -20,6 +21,7 @@ export const registry = {
   sysadmin,
   coding,
   mining,
+  gameplay,
   matrix,
   digitalrain,
   bsd: rain_bsd,
